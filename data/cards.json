@@ -1,0 +1,142 @@
+[
+  {
+    "id": 1,
+    "name": "Goblin",
+    "rarity": "Common"
+  },
+  {
+    "id": 2,
+    "name": "Archer",
+    "rarity": "Common"
+  },
+  {
+    "id": 3,
+    "name": "Squire",
+    "rarity": "Common"
+  },
+  {
+    "id": 4,
+    "name": "Spearman",
+    "rarity": "Common"
+  },
+  {
+    "id": 5,
+    "name": "Hunter",
+    "rarity": "Common"
+  },
+  {
+    "id": 6,
+    "name": "Skeleton",
+    "rarity": "Common"
+  },
+  {
+    "id": 7,
+    "name": "Ghoul",
+    "rarity": "Common"
+  },
+  {
+    "id": 8,
+    "name": "Orc",
+    "rarity": "Common"
+  },
+  {
+    "id": 9,
+    "name": "Elf",
+    "rarity": "Common"
+  },
+  {
+    "id": 10,
+    "name": "Bat",
+    "rarity": "Common"
+  },
+  {
+    "id": 11,
+    "name": "Knight",
+    "rarity": "Rare"
+  },
+  {
+    "id": 12,
+    "name": "Barbarian",
+    "rarity": "Rare"
+  },
+  {
+    "id": 13,
+    "name": "Valkyrie",
+    "rarity": "Rare"
+  },
+  {
+    "id": 14,
+    "name": "Wyvern",
+    "rarity": "Rare"
+  },
+  {
+    "id": 15,
+    "name": "Giant Eagle",
+    "rarity": "Rare"
+  },
+  {
+    "id": 16,
+    "name": "Fire Dragon",
+    "rarity": "Epic"
+  },
+  {
+    "id": 17,
+    "name": "Ice Dragon",
+    "rarity": "Epic"
+  },
+  {
+    "id": 18,
+    "name": "Sorcerer",
+    "rarity": "Epic"
+  },
+  {
+    "id": 19,
+    "name": "Rock Golem",
+    "rarity": "Epic"
+  },
+  {
+    "id": 20,
+    "name": "Lava Golem",
+    "rarity": "Epic"
+  },
+  {
+    "id": 21,
+    "name": "Dragonlord",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 22,
+    "name": "Heroic Knight",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 23,
+    "name": "Master Wizard",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 24,
+    "name": "Fabled Dragon",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 25,
+    "name": "Walking Castle",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 26,
+    "name": "God Slayer",
+    "rarity": "Mythical"
+  },
+  {
+    "id": 27,
+    "name": "Ethereal Dragon",
+    "rarity": "Mythical"
+  },
+  {
+    "id": 28,
+    "name": "Cosmic Entity",
+    "rarity": "Mythical"
+  }
+]
