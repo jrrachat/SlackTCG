@@ -3,7 +3,6 @@ require("dotenv").config();
 const { App } = require("@slack/bolt");
 const axios = require("axios");
 
-
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   appToken: process.env.SLACK_APP_TOKEN,
@@ -23,7 +22,9 @@ app.command("/slacktcg-help", async ({ ack, respond }) => {
     text:
 `Available Commands:
 /slacktcg-ping - Check bot latency
-/slacktcg-catfact - Get a cat fact`
+/slacktcg-pack - Open your daily pack
+/slacktcg-inventory - See what cards you've collected
+/slacktcg-list - Lists all available cards and their rarity.`
   });
 });
 
