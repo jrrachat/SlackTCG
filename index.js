@@ -11,6 +11,8 @@ console.log(`Loaded ${cards.length} cards`);
 
 const usersPath = __dirname + "/data/users.json";
 
+const PACK_COOLDOWN = 24 * 60 * 60 * 1000;
+
 let users = JSON.parse(
   fs.readFileSync(usersPath, "utf8")
 );
@@ -20,6 +22,14 @@ function saveUsers() {
     usersPath,
     JSON.stringify(users, null, 2)
   );
+}
+
+function getPackCooldown(user) {
+  if (!user.lastPack) return 0;
+
+  const remaining = PACK_COOLDOWN - (Date.now() - user.lastPack);
+
+  return remaining > 0 ? remaining : 0;
 }
 
 const rarityIcons = {
@@ -130,6 +140,32 @@ app.command("/slacktcg-pack", async ({ command, ack, respond }) => {
   }
 
 
+  const userId = command.user_id;
+
+  if (!users[userId]) {
+    users[userId] = {
+      cards: [],
+      lastPack: 0
+    };
+  }
+
+  const user = users[userId];
+
+  const cooldown = getPackCooldown(user);
+
+
+  if (cooldown > 0 && command.user_id !== "U0BHV9ZKLBD") {
+    const hours = Math.floor(cooldown / (1000 * 60 * 60));
+    const minutes = Math.floor(
+      (cooldown % (1000 * 60 * 60)) / (1000 * 60)
+    );
+
+    await respond(
+      `⏳ You already opened a pack! Come back in ${hours}h ${minutes}m.`
+    );
+    return;
+  }
+
   const pack = [];
 
   for (let i = 0; i < 5; i++) {
@@ -143,19 +179,8 @@ app.command("/slacktcg-pack", async ({ command, ack, respond }) => {
     });
   }
 
-
-  const userId = command.user_id;
-
-
-  if (!users[userId]) {
-    users[userId] = {
-      cards: []
-    };
-  }
-
-
   users[userId].cards.push(...pack);
-
+  user.lastPack = Date.now();
   saveUsers();
 
 
@@ -194,6 +219,9 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
       }
     ]
   });
+
+  user.lastPack = Date.now();
+  saveUsers();
 });
 const rarityOrder = {
   Mythical: 0,
