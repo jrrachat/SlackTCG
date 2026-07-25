@@ -11,9 +11,13 @@ Rarest cards in the game: Rainbow Ethereal Dragon, Rainbow God Slayer, or Rainbo
 # How to use each command
 
 `/slacktcg-ping` — Check if the SlackTCG bot is online and view its response latency to see how quickly it is responding.
+
 `/slacktcg-pack` — Open your daily card pack to receive five random cards with different rarities and possible modifiers.
+
 `/slacktcg-help` — View a list of all available SlackTCG commands and learn how to use the bot.
+
 `/slacktcg-inventory` — View your card collection, including the cards you own, their rarities, modifiers, and quantities.
+
 `/slacktcg-trade @user <card>` — Trade one of your cards to another user by entering their username and the card name, including the modifier if applicable (for example, `rock golem-shiny`).
 
 
