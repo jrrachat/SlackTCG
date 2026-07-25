@@ -2,7 +2,6 @@ require("dotenv").config();
 
 const { App } = require("@slack/bolt");
 const fs = require("fs");
-const crypto = require("crypto");
 
 const cards = JSON.parse(
   fs.readFileSync(__dirname + "/data/cards.json", "utf8")
@@ -67,11 +66,11 @@ Open your daily pack
 /slacktcg-inventory
 View your collection
 
-/slacktcg-view <card>
-View individual copies
+/slacktcg-trade @user <card>
+Trade a specific card by using title. If the card has a modifier, it would look like ghoul-shiny or rock golem-shiny (include spaces if title has them)
 
-/slacktcg-trade @user <cardID>
-Trade a specific card`
+Card Rarities: Common 60%, Rare 25%, Epic 10%, Legendary 4%, Mythical 1%
+Modifier Rarities: Normal 96%, Gold 3%, Shiny 0.9%, Rainbow 0.1%`
   });
 });
 
@@ -112,19 +111,18 @@ app.command("/slacktcg-pack", async ({ command, ack, respond }) => {
     ];
   }
 
-
   function getVariant() {
     const roll = Math.random() * 100;
 
-    if (roll < 0.5) {
+    if (roll < 0.1) {
       return "🌈 Rainbow";
     }
 
-    if (roll < 2) {
+    if (roll < 1) {
       return "✨ Shiny";
     }
 
-    if (roll < 5) {
+    if (roll < 4) {
       return "🟨 Gold";
     }
 
@@ -140,7 +138,6 @@ app.command("/slacktcg-pack", async ({ command, ack, respond }) => {
     const card = getRandomCard(rarity);
 
     pack.push({
-      instanceId: crypto.randomBytes(4).toString("hex"),
       ...card,
       variant: getVariant()
     });
@@ -198,6 +195,14 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
     ]
   });
 });
+const rarityOrder = {
+  Mythical: 0,
+  Legendary: 1,
+  Epic: 2,
+  Rare: 3,
+  Uncommon: 4,
+  Common: 5
+};
 
 app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
   await ack();
@@ -211,7 +216,6 @@ app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
     return;
   }
 
-
   const grouped = {};
 
   for (const card of users[userId].cards) {
@@ -220,34 +224,41 @@ app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
     if (!grouped[key]) {
       grouped[key] = {
         ...card,
-        count: 0,
-        ids: []
+        count: 0
       };
     }
 
     grouped[key].count++;
-    grouped[key].ids.push(card.instanceId);
   }
 
-
   const inventoryText = Object.values(grouped)
-    .map(card => {
+    .sort((a, b) => {
+      // Sort by rarity
+      const rarityDiff =
+        (rarityOrder[a.rarity] ?? 999) -
+        (rarityOrder[b.rarity] ?? 999);
 
+      if (rarityDiff !== 0) return rarityDiff;
+
+      // Then by name
+      const nameDiff = a.name.localeCompare(b.name);
+      if (nameDiff !== 0) return nameDiff;
+
+      // Then by variant
+      return a.variant.localeCompare(b.variant);
+    })
+    .map(card => {
       let text =
         `🃏 *${card.name}* x${card.count}
 ${rarityIcons[card.rarity]} *${card.rarity}*`;
-
 
       if (card.variant !== "Normal") {
         text += `\n✨ Modifier: ${card.variant}`;
       }
 
-
       return text;
-
     })
     .join("\n\n────────────\n\n");
-
 
   await respond({
     blocks: [
@@ -269,103 +280,32 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
   });
 });
 
-
-
-app.command("/slacktcg-view", async ({ command, ack, respond }) => {
-  await ack();
-
-  const userId = command.user_id;
-  const search = command.text.trim().toLowerCase();
-
-
-  if (!search) {
-    await respond(
-      "❌ Usage: `/slacktcg-view <card name>`"
-    );
-    return;
-  }
-
-
-  if (!users[userId]) {
-    await respond("📦 Your inventory is empty!");
-    return;
-  }
-
-
-  const found = users[userId].cards.filter(
-    card => card.name.toLowerCase() === search
-  );
-
-
-  if (found.length === 0) {
-    await respond(
-      `❌ You don't own any ${command.text}`
-    );
-    return;
-  }
-
-
-  const text = found
-    .map((card, index) => {
-
-      let result =
-        `${index + 1}. 🆔 \`${card.instanceId}\`
-🃏 *${card.name}*
-${rarityIcons[card.rarity]} *${card.rarity}*`;
-
-
-      if (card.variant !== "Normal") {
-        result += `\n✨ Modifier: ${card.variant}`;
-      }
-
-
-      return result;
-
-    })
-    .join("\n\n");
-
-
-  await respond({
-    text:
-      `🔎 *${found[0].name} Collection*
-
-${text}`
-  });
-});
-
-
-
 app.command("/slacktcg-trade", async ({ command, ack, respond }) => {
   await ack();
 
   const senderId = command.user_id;
 
-  const args = command.text.split(" ");
+  const firstSpace = command.text.indexOf(" ");
 
-  if (args.length < 2) {
+  if (firstSpace === -1) {
     await respond(
-      "❌ Usage: `/slacktcg-trade @user cardID`"
+      "❌ Usage: `/slacktcg-trade @user card-name`"
     );
     return;
   }
 
+  const targetArg = command.text.substring(0, firstSpace);
+  const cardArg = command.text.substring(firstSpace + 1).trim();
 
-  const targetId = args[0]
+  const targetId = targetArg
     .replace("<@", "")
     .replace(">", "")
     .split("|")[0];
 
-
-  const cardId = args[1];
-
-
-  if (!users[senderId] || !users[senderId].cards) {
-    await respond(
-      "❌ You don't have any cards."
-    );
+  if (!users[senderId] || users[senderId].cards.length === 0) {
+    await respond("❌ You don't have any cards.");
     return;
   }
-
 
   if (!users[targetId]) {
     users[targetId] = {
@@ -373,41 +313,59 @@ app.command("/slacktcg-trade", async ({ command, ack, respond }) => {
     };
   }
 
+  let name = cardArg;
+  let variant = "Normal";
 
-  const cardIndex = users[senderId].cards.findIndex(
-    card => card.instanceId === cardId
+  const lower = cardArg.toLowerCase();
+
+  if (lower.endsWith("-rainbow")) {
+    variant = "🌈 Rainbow";
+    name = cardArg.slice(0, -9);
+  } else if (lower.endsWith("-shiny")) {
+    variant = "✨ Shiny";
+    name = cardArg.slice(0, -7);
+  } else if (lower.endsWith("-gold")) {
+    variant = "🟨 Gold";
+    name = cardArg.slice(0, -5);
+  }
+
+  name = name.trim();
+
+  const cardIndex = users[senderId].cards.findIndex(card =>
+    card.name.toLowerCase() === name.toLowerCase() &&
+    card.variant === variant
   );
-
 
   if (cardIndex === -1) {
     await respond(
-      "❌ You don't own a card with that ID."
+      `❌ You don't own a ${variant === "Normal"
+        ? name
+        : `${name} (${variant})`
+      }.`
     );
     return;
   }
 
-
-  const tradedCard = users[senderId].cards[cardIndex];
-
-
-  users[senderId].cards.splice(cardIndex, 1);
+  const tradedCard = users[senderId].cards.splice(cardIndex, 1)[0];
 
   users[targetId].cards.push(tradedCard);
 
-
   saveUsers();
 
+  let text =
+    `🤝 *Trade Complete!*\n\n` +
+    `You gave:\n` +
+    `🃏 *${tradedCard.name}*\n` +
+    `${rarityIcons[tradedCard.rarity]} ${tradedCard.rarity}`;
+
+  if (tradedCard.variant !== "Normal") {
+    text += `\n✨ Modifier: ${tradedCard.variant}`;
+  }
+
+  text += `\n\nTo:\n<@${targetId}>`;
 
   await respond({
-    text:
-      `🤝 *Trade Complete!*
-
-You gave:
-🃏 *${tradedCard.name}*
-${rarityIcons[tradedCard.rarity]} ${tradedCard.rarity}
-
-To:
-<@${targetId}>`
+    text
   });
 });
 
