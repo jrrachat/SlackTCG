@@ -10,15 +10,15 @@ Rarest cards in the game: Rainbow Ethereal Dragon, Rainbow God Slayer, or Rainbo
 
 # How to use each command
 
-`/slacktcg-ping` — Check if the SlackTCG bot is online and view its response latency to see how quickly it is responding.
+`/slacktcg-ping` — Check if the SlackTCG bot is online and view its latency.
 
-`/slacktcg-pack` — Open your daily card pack to receive five random cards with different rarities and possible modifiers.
+`/slacktcg-pack` — Open your daily pack to receive five random cards
 
-`/slacktcg-help` — View a list of all available SlackTCG commands and learn how to use the bot.
+`/slacktcg-help` — View a list of all available commands and learn how to use them.
 
-`/slacktcg-inventory` — View your card collection, including the cards you own, their rarities, modifiers, and quantities.
+`/slacktcg-inventory` — View your card collection.
 
-`/slacktcg-trade @user <card>` — Trade one of your cards to another user by entering their username and the card name, including the modifier if applicable (for example, `rock golem-shiny`).
+`/slacktcg-trade @user <card>` — Trade one of your cards to another user by entering their username and the card name, including the modifier if the card has one (for a shiny rock golem, `rock golem-shiny`).
 
 
 ![alt text](https://stardance.hackclub.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6MjA1MTM0LCJwdXIiOiJibG9iX2lkIn19--36ed88260394e82bd99a9ad94690a0affbe238c8/Screenshot%202026-07-25%20161904.png)
