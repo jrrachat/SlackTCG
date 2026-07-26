@@ -1,142 +1,1052 @@
 [
   {
     "id": 1,
-    "name": "Goblin",
+    "name": "Ashen Goblin",
     "rarity": "Common"
   },
   {
     "id": 2,
-    "name": "Archer",
+    "name": "Ashen Squire",
     "rarity": "Common"
   },
   {
     "id": 3,
-    "name": "Squire",
+    "name": "Ashen Archer",
     "rarity": "Common"
   },
   {
     "id": 4,
-    "name": "Flagbearer",
+    "name": "Ashen Wisp",
     "rarity": "Common"
   },
   {
     "id": 5,
-    "name": "Hunter",
+    "name": "Ashen Wolf",
     "rarity": "Common"
   },
   {
     "id": 6,
-    "name": "Skeleton",
+    "name": "Ashen Imp",
     "rarity": "Common"
   },
   {
     "id": 7,
-    "name": "Ghoul",
+    "name": "Ashen Dryad",
     "rarity": "Common"
   },
   {
     "id": 8,
-    "name": "Orc",
+    "name": "Ashen Kobold",
     "rarity": "Common"
   },
   {
     "id": 9,
-    "name": "Elf",
+    "name": "Ashen Raven",
     "rarity": "Common"
   },
   {
     "id": 10,
-    "name": "Bat",
+    "name": "Ashen Sprite",
     "rarity": "Common"
   },
   {
     "id": 11,
-    "name": "Knight",
-    "rarity": "Rare"
+    "name": "Briar Goblin",
+    "rarity": "Common"
   },
   {
     "id": 12,
-    "name": "Barbarian",
-    "rarity": "Rare"
+    "name": "Briar Squire",
+    "rarity": "Common"
   },
   {
     "id": 13,
-    "name": "Valkyrie",
-    "rarity": "Rare"
+    "name": "Briar Archer",
+    "rarity": "Common"
   },
   {
     "id": 14,
-    "name": "Wyvern",
-    "rarity": "Rare"
+    "name": "Briar Wisp",
+    "rarity": "Common"
   },
   {
     "id": 15,
-    "name": "Giant Eagle",
-    "rarity": "Rare"
+    "name": "Briar Wolf",
+    "rarity": "Common"
   },
   {
     "id": 16,
-    "name": "Fire Dragon",
-    "rarity": "Epic"
+    "name": "Briar Imp",
+    "rarity": "Common"
   },
   {
     "id": 17,
-    "name": "Ice Dragon",
-    "rarity": "Epic"
+    "name": "Briar Dryad",
+    "rarity": "Common"
   },
   {
     "id": 18,
-    "name": "Sorcerer",
-    "rarity": "Epic"
+    "name": "Briar Kobold",
+    "rarity": "Common"
   },
   {
     "id": 19,
-    "name": "Rock Golem",
-    "rarity": "Epic"
+    "name": "Briar Raven",
+    "rarity": "Common"
   },
   {
     "id": 20,
-    "name": "Lava Golem",
-    "rarity": "Epic"
+    "name": "Briar Sprite",
+    "rarity": "Common"
   },
   {
     "id": 21,
-    "name": "Dragonlord",
-    "rarity": "Legendary"
+    "name": "Cinder Goblin",
+    "rarity": "Common"
   },
   {
     "id": 22,
-    "name": "Heroic Knight",
-    "rarity": "Legendary"
+    "name": "Cinder Squire",
+    "rarity": "Common"
   },
   {
     "id": 23,
-    "name": "Master Wizard",
-    "rarity": "Legendary"
+    "name": "Cinder Archer",
+    "rarity": "Common"
   },
   {
     "id": 24,
-    "name": "Fabled Dragon",
-    "rarity": "Legendary"
+    "name": "Cinder Wisp",
+    "rarity": "Common"
   },
   {
     "id": 25,
-    "name": "Walking Castle",
-    "rarity": "Legendary"
+    "name": "Cinder Wolf",
+    "rarity": "Common"
   },
   {
     "id": 26,
-    "name": "God Slayer",
-    "rarity": "Mythical"
+    "name": "Cinder Imp",
+    "rarity": "Common"
   },
   {
     "id": 27,
-    "name": "Ethereal Dragon",
-    "rarity": "Mythical"
+    "name": "Cinder Dryad",
+    "rarity": "Common"
   },
   {
     "id": 28,
-    "name": "Cosmic Entity",
+    "name": "Cinder Kobold",
+    "rarity": "Common"
+  },
+  {
+    "id": 29,
+    "name": "Cinder Raven",
+    "rarity": "Common"
+  },
+  {
+    "id": 30,
+    "name": "Cinder Sprite",
+    "rarity": "Common"
+  },
+  {
+    "id": 31,
+    "name": "Dusk Goblin",
+    "rarity": "Common"
+  },
+  {
+    "id": 32,
+    "name": "Dusk Squire",
+    "rarity": "Common"
+  },
+  {
+    "id": 33,
+    "name": "Dusk Archer",
+    "rarity": "Common"
+  },
+  {
+    "id": 34,
+    "name": "Dusk Wisp",
+    "rarity": "Common"
+  },
+  {
+    "id": 35,
+    "name": "Dusk Wolf",
+    "rarity": "Common"
+  },
+  {
+    "id": 36,
+    "name": "Dusk Imp",
+    "rarity": "Common"
+  },
+  {
+    "id": 37,
+    "name": "Dusk Dryad",
+    "rarity": "Common"
+  },
+  {
+    "id": 38,
+    "name": "Dusk Kobold",
+    "rarity": "Common"
+  },
+  {
+    "id": 39,
+    "name": "Dusk Raven",
+    "rarity": "Common"
+  },
+  {
+    "id": 40,
+    "name": "Dusk Sprite",
+    "rarity": "Common"
+  },
+  {
+    "id": 41,
+    "name": "Elder Goblin",
+    "rarity": "Common"
+  },
+  {
+    "id": 42,
+    "name": "Elder Squire",
+    "rarity": "Common"
+  },
+  {
+    "id": 43,
+    "name": "Elder Archer",
+    "rarity": "Common"
+  },
+  {
+    "id": 44,
+    "name": "Elder Wisp",
+    "rarity": "Common"
+  },
+  {
+    "id": 45,
+    "name": "Elder Wolf",
+    "rarity": "Common"
+  },
+  {
+    "id": 46,
+    "name": "Elder Imp",
+    "rarity": "Common"
+  },
+  {
+    "id": 47,
+    "name": "Elder Dryad",
+    "rarity": "Common"
+  },
+  {
+    "id": 48,
+    "name": "Elder Kobold",
+    "rarity": "Common"
+  },
+  {
+    "id": 49,
+    "name": "Elder Raven",
+    "rarity": "Common"
+  },
+  {
+    "id": 50,
+    "name": "Elder Sprite",
+    "rarity": "Common"
+  },
+  {
+    "id": 51,
+    "name": "Frost Goblin",
+    "rarity": "Common"
+  },
+  {
+    "id": 52,
+    "name": "Frost Squire",
+    "rarity": "Common"
+  },
+  {
+    "id": 53,
+    "name": "Frost Archer",
+    "rarity": "Common"
+  },
+  {
+    "id": 54,
+    "name": "Frost Wisp",
+    "rarity": "Common"
+  },
+  {
+    "id": 55,
+    "name": "Frost Wolf",
+    "rarity": "Common"
+  },
+  {
+    "id": 56,
+    "name": "Frost Imp",
+    "rarity": "Common"
+  },
+  {
+    "id": 57,
+    "name": "Frost Dryad",
+    "rarity": "Common"
+  },
+  {
+    "id": 58,
+    "name": "Frost Kobold",
+    "rarity": "Common"
+  },
+  {
+    "id": 59,
+    "name": "Frost Raven",
+    "rarity": "Common"
+  },
+  {
+    "id": 60,
+    "name": "Frost Sprite",
+    "rarity": "Common"
+  },
+  {
+    "id": 61,
+    "name": "Gloom Goblin",
+    "rarity": "Common"
+  },
+  {
+    "id": 62,
+    "name": "Gloom Squire",
+    "rarity": "Common"
+  },
+  {
+    "id": 63,
+    "name": "Gloom Archer",
+    "rarity": "Common"
+  },
+  {
+    "id": 64,
+    "name": "Gloom Wisp",
+    "rarity": "Common"
+  },
+  {
+    "id": 65,
+    "name": "Gloom Wolf",
+    "rarity": "Common"
+  },
+  {
+    "id": 66,
+    "name": "Gloom Imp",
+    "rarity": "Common"
+  },
+  {
+    "id": 67,
+    "name": "Gloom Dryad",
+    "rarity": "Common"
+  },
+  {
+    "id": 68,
+    "name": "Gloom Kobold",
+    "rarity": "Common"
+  },
+  {
+    "id": 69,
+    "name": "Gloom Raven",
+    "rarity": "Common"
+  },
+  {
+    "id": 70,
+    "name": "Gloom Sprite",
+    "rarity": "Common"
+  },
+  {
+    "id": 71,
+    "name": "Hollow Goblin",
+    "rarity": "Common"
+  },
+  {
+    "id": 72,
+    "name": "Hollow Squire",
+    "rarity": "Common"
+  },
+  {
+    "id": 73,
+    "name": "Hollow Archer",
+    "rarity": "Common"
+  },
+  {
+    "id": 74,
+    "name": "Hollow Wisp",
+    "rarity": "Common"
+  },
+  {
+    "id": 75,
+    "name": "Hollow Wolf",
+    "rarity": "Common"
+  },
+  {
+    "id": 76,
+    "name": "Hollow Imp",
+    "rarity": "Common"
+  },
+  {
+    "id": 77,
+    "name": "Hollow Dryad",
+    "rarity": "Common"
+  },
+  {
+    "id": 78,
+    "name": "Hollow Kobold",
+    "rarity": "Common"
+  },
+  {
+    "id": 79,
+    "name": "Hollow Raven",
+    "rarity": "Common"
+  },
+  {
+    "id": 80,
+    "name": "Hollow Sprite",
+    "rarity": "Common"
+  },
+  {
+    "id": 81,
+    "name": "Iron Goblin",
+    "rarity": "Common"
+  },
+  {
+    "id": 82,
+    "name": "Iron Squire",
+    "rarity": "Common"
+  },
+  {
+    "id": 83,
+    "name": "Iron Archer",
+    "rarity": "Common"
+  },
+  {
+    "id": 84,
+    "name": "Iron Wisp",
+    "rarity": "Common"
+  },
+  {
+    "id": 85,
+    "name": "Iron Wolf",
+    "rarity": "Common"
+  },
+  {
+    "id": 86,
+    "name": "Iron Imp",
+    "rarity": "Common"
+  },
+  {
+    "id": 87,
+    "name": "Iron Dryad",
+    "rarity": "Common"
+  },
+  {
+    "id": 88,
+    "name": "Iron Kobold",
+    "rarity": "Common"
+  },
+  {
+    "id": 89,
+    "name": "Iron Raven",
+    "rarity": "Common"
+  },
+  {
+    "id": 90,
+    "name": "Iron Sprite",
+    "rarity": "Common"
+  },
+  {
+    "id": 91,
+    "name": "Jade Goblin",
+    "rarity": "Common"
+  },
+  {
+    "id": 92,
+    "name": "Jade Squire",
+    "rarity": "Common"
+  },
+  {
+    "id": 93,
+    "name": "Jade Archer",
+    "rarity": "Common"
+  },
+  {
+    "id": 94,
+    "name": "Jade Wisp",
+    "rarity": "Common"
+  },
+  {
+    "id": 95,
+    "name": "Jade Wolf",
+    "rarity": "Common"
+  },
+  {
+    "id": 96,
+    "name": "Jade Imp",
+    "rarity": "Common"
+  },
+  {
+    "id": 97,
+    "name": "Jade Dryad",
+    "rarity": "Common"
+  },
+  {
+    "id": 98,
+    "name": "Jade Kobold",
+    "rarity": "Common"
+  },
+  {
+    "id": 99,
+    "name": "Jade Raven",
+    "rarity": "Common"
+  },
+  {
+    "id": 100,
+    "name": "Jade Sprite",
+    "rarity": "Common"
+  },
+  {
+    "id": 101,
+    "name": "Moonlit Griffin",
+    "rarity": "Rare"
+  },
+  {
+    "id": 102,
+    "name": "Moonlit Sentinel",
+    "rarity": "Rare"
+  },
+  {
+    "id": 103,
+    "name": "Moonlit Warlock",
+    "rarity": "Rare"
+  },
+  {
+    "id": 104,
+    "name": "Moonlit Valkyrie",
+    "rarity": "Rare"
+  },
+  {
+    "id": 105,
+    "name": "Moonlit Wyvern",
+    "rarity": "Rare"
+  },
+  {
+    "id": 106,
+    "name": "Moonlit Druid",
+    "rarity": "Rare"
+  },
+  {
+    "id": 107,
+    "name": "Moonlit Basilisk",
+    "rarity": "Rare"
+  },
+  {
+    "id": 108,
+    "name": "Moonlit Spellblade",
+    "rarity": "Rare"
+  },
+  {
+    "id": 109,
+    "name": "Moonlit Treant",
+    "rarity": "Rare"
+  },
+  {
+    "id": 110,
+    "name": "Moonlit Manticore",
+    "rarity": "Rare"
+  },
+  {
+    "id": 111,
+    "name": "Runebound Griffin",
+    "rarity": "Rare"
+  },
+  {
+    "id": 112,
+    "name": "Runebound Sentinel",
+    "rarity": "Rare"
+  },
+  {
+    "id": 113,
+    "name": "Runebound Warlock",
+    "rarity": "Rare"
+  },
+  {
+    "id": 114,
+    "name": "Runebound Valkyrie",
+    "rarity": "Rare"
+  },
+  {
+    "id": 115,
+    "name": "Runebound Wyvern",
+    "rarity": "Rare"
+  },
+  {
+    "id": 116,
+    "name": "Runebound Druid",
+    "rarity": "Rare"
+  },
+  {
+    "id": 117,
+    "name": "Runebound Basilisk",
+    "rarity": "Rare"
+  },
+  {
+    "id": 118,
+    "name": "Runebound Spellblade",
+    "rarity": "Rare"
+  },
+  {
+    "id": 119,
+    "name": "Runebound Treant",
+    "rarity": "Rare"
+  },
+  {
+    "id": 120,
+    "name": "Runebound Manticore",
+    "rarity": "Rare"
+  },
+  {
+    "id": 121,
+    "name": "Shadow Griffin",
+    "rarity": "Rare"
+  },
+  {
+    "id": 122,
+    "name": "Shadow Sentinel",
+    "rarity": "Rare"
+  },
+  {
+    "id": 123,
+    "name": "Shadow Warlock",
+    "rarity": "Rare"
+  },
+  {
+    "id": 124,
+    "name": "Shadow Valkyrie",
+    "rarity": "Rare"
+  },
+  {
+    "id": 125,
+    "name": "Shadow Wyvern",
+    "rarity": "Rare"
+  },
+  {
+    "id": 126,
+    "name": "Shadow Druid",
+    "rarity": "Rare"
+  },
+  {
+    "id": 127,
+    "name": "Shadow Basilisk",
+    "rarity": "Rare"
+  },
+  {
+    "id": 128,
+    "name": "Shadow Spellblade",
+    "rarity": "Rare"
+  },
+  {
+    "id": 129,
+    "name": "Shadow Treant",
+    "rarity": "Rare"
+  },
+  {
+    "id": 130,
+    "name": "Shadow Manticore",
+    "rarity": "Rare"
+  },
+  {
+    "id": 131,
+    "name": "Silver Griffin",
+    "rarity": "Rare"
+  },
+  {
+    "id": 132,
+    "name": "Silver Sentinel",
+    "rarity": "Rare"
+  },
+  {
+    "id": 133,
+    "name": "Silver Warlock",
+    "rarity": "Rare"
+  },
+  {
+    "id": 134,
+    "name": "Silver Valkyrie",
+    "rarity": "Rare"
+  },
+  {
+    "id": 135,
+    "name": "Silver Wyvern",
+    "rarity": "Rare"
+  },
+  {
+    "id": 136,
+    "name": "Silver Druid",
+    "rarity": "Rare"
+  },
+  {
+    "id": 137,
+    "name": "Silver Basilisk",
+    "rarity": "Rare"
+  },
+  {
+    "id": 138,
+    "name": "Silver Spellblade",
+    "rarity": "Rare"
+  },
+  {
+    "id": 139,
+    "name": "Silver Treant",
+    "rarity": "Rare"
+  },
+  {
+    "id": 140,
+    "name": "Silver Manticore",
+    "rarity": "Rare"
+  },
+  {
+    "id": 141,
+    "name": "Storm Griffin",
+    "rarity": "Rare"
+  },
+  {
+    "id": 142,
+    "name": "Storm Sentinel",
+    "rarity": "Rare"
+  },
+  {
+    "id": 143,
+    "name": "Storm Warlock",
+    "rarity": "Rare"
+  },
+  {
+    "id": 144,
+    "name": "Storm Valkyrie",
+    "rarity": "Rare"
+  },
+  {
+    "id": 145,
+    "name": "Storm Wyvern",
+    "rarity": "Rare"
+  },
+  {
+    "id": 146,
+    "name": "Storm Druid",
+    "rarity": "Rare"
+  },
+  {
+    "id": 147,
+    "name": "Storm Basilisk",
+    "rarity": "Rare"
+  },
+  {
+    "id": 148,
+    "name": "Storm Spellblade",
+    "rarity": "Rare"
+  },
+  {
+    "id": 149,
+    "name": "Storm Treant",
+    "rarity": "Rare"
+  },
+  {
+    "id": 150,
+    "name": "Storm Manticore",
+    "rarity": "Rare"
+  },
+  {
+    "id": 151,
+    "name": "Celestial Dragon",
+    "rarity": "Epic"
+  },
+  {
+    "id": 152,
+    "name": "Celestial Archmage",
+    "rarity": "Epic"
+  },
+  {
+    "id": 153,
+    "name": "Celestial Titan",
+    "rarity": "Epic"
+  },
+  {
+    "id": 154,
+    "name": "Celestial Phoenix",
+    "rarity": "Epic"
+  },
+  {
+    "id": 155,
+    "name": "Celestial Golem",
+    "rarity": "Epic"
+  },
+  {
+    "id": 156,
+    "name": "Celestial Hydra",
+    "rarity": "Epic"
+  },
+  {
+    "id": 157,
+    "name": "Emberforged Dragon",
+    "rarity": "Epic"
+  },
+  {
+    "id": 158,
+    "name": "Emberforged Archmage",
+    "rarity": "Epic"
+  },
+  {
+    "id": 159,
+    "name": "Emberforged Titan",
+    "rarity": "Epic"
+  },
+  {
+    "id": 160,
+    "name": "Emberforged Phoenix",
+    "rarity": "Epic"
+  },
+  {
+    "id": 161,
+    "name": "Emberforged Golem",
+    "rarity": "Epic"
+  },
+  {
+    "id": 162,
+    "name": "Emberforged Hydra",
+    "rarity": "Epic"
+  },
+  {
+    "id": 163,
+    "name": "Nether Dragon",
+    "rarity": "Epic"
+  },
+  {
+    "id": 164,
+    "name": "Nether Archmage",
+    "rarity": "Epic"
+  },
+  {
+    "id": 165,
+    "name": "Nether Titan",
+    "rarity": "Epic"
+  },
+  {
+    "id": 166,
+    "name": "Nether Phoenix",
+    "rarity": "Epic"
+  },
+  {
+    "id": 167,
+    "name": "Nether Golem",
+    "rarity": "Epic"
+  },
+  {
+    "id": 168,
+    "name": "Nether Hydra",
+    "rarity": "Epic"
+  },
+  {
+    "id": 169,
+    "name": "Starborn Dragon",
+    "rarity": "Epic"
+  },
+  {
+    "id": 170,
+    "name": "Starborn Archmage",
+    "rarity": "Epic"
+  },
+  {
+    "id": 171,
+    "name": "Starborn Titan",
+    "rarity": "Epic"
+  },
+  {
+    "id": 172,
+    "name": "Starborn Phoenix",
+    "rarity": "Epic"
+  },
+  {
+    "id": 173,
+    "name": "Starborn Golem",
+    "rarity": "Epic"
+  },
+  {
+    "id": 174,
+    "name": "Starborn Hydra",
+    "rarity": "Epic"
+  },
+  {
+    "id": 175,
+    "name": "Voidtouched Dragon",
+    "rarity": "Epic"
+  },
+  {
+    "id": 176,
+    "name": "Voidtouched Archmage",
+    "rarity": "Epic"
+  },
+  {
+    "id": 177,
+    "name": "Voidtouched Titan",
+    "rarity": "Epic"
+  },
+  {
+    "id": 178,
+    "name": "Voidtouched Phoenix",
+    "rarity": "Epic"
+  },
+  {
+    "id": 179,
+    "name": "Voidtouched Golem",
+    "rarity": "Epic"
+  },
+  {
+    "id": 180,
+    "name": "Voidtouched Hydra",
+    "rarity": "Epic"
+  },
+  {
+    "id": 181,
+    "name": "Eternal Dragonlord",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 182,
+    "name": "Eternal Rune King",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 183,
+    "name": "Eternal Astral Queen",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 184,
+    "name": "Eternal Leviathan",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 185,
+    "name": "Eternal Colossus",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 186,
+    "name": "Fabled Dragonlord",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 187,
+    "name": "Fabled Rune King",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 188,
+    "name": "Fabled Astral Queen",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 189,
+    "name": "Fabled Leviathan",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 190,
+    "name": "Fabled Colossus",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 191,
+    "name": "Worldforged Dragonlord",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 192,
+    "name": "Worldforged Rune King",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 193,
+    "name": "Worldforged Astral Queen",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 194,
+    "name": "Worldforged Leviathan",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 195,
+    "name": "Worldforged Colossus",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 196,
+    "name": "Doomcrowned Dragonlord",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 197,
+    "name": "Doomcrowned Rune King",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 198,
+    "name": "Doomcrowned Astral Queen",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 199,
+    "name": "Doomcrowned Leviathan",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 200,
+    "name": "Doomcrowned Colossus",
+    "rarity": "Legendary"
+  },
+  {
+    "id": 201,
+    "name": "Primordial World Serpent",
+    "rarity": "Mythical"
+  },
+  {
+    "id": 202,
+    "name": "Primordial Dream Eater",
+    "rarity": "Mythical"
+  },
+  {
+    "id": 203,
+    "name": "Primordial Fate Weaver",
+    "rarity": "Mythical"
+  },
+  {
+    "id": 204,
+    "name": "Primordial Sun Devourer",
+    "rarity": "Mythical"
+  },
+  {
+    "id": 205,
+    "name": "Primordial First Dragon",
+    "rarity": "Mythical"
+  },
+  {
+    "id": 206,
+    "name": "Godsworn World Serpent",
+    "rarity": "Mythical"
+  },
+  {
+    "id": 207,
+    "name": "Godsworn Dream Eater",
+    "rarity": "Mythical"
+  },
+  {
+    "id": 208,
+    "name": "Godsworn Fate Weaver",
+    "rarity": "Mythical"
+  },
+  {
+    "id": 209,
+    "name": "Godsworn Sun Devourer",
+    "rarity": "Mythical"
+  },
+  {
+    "id": 210,
+    "name": "Godsworn First Dragon",
     "rarity": "Mythical"
   }
 ]
