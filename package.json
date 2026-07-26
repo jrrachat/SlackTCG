@@ -4,6 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
+    "check": "node --check index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -12,6 +14,7 @@
   "type": "commonjs",
   "dependencies": {
     "@slack/bolt": "^5.0.0",
+    "@slack/oauth": "^4.0.0",
     "axios": "^1.18.1",
     "dotenv": "^17.4.2"
   }

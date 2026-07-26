@@ -1,7 +1,9 @@
 require("dotenv").config();
 
 const { App } = require("@slack/bolt");
+const { FileInstallationStore } = require("@slack/oauth");
 const fs = require("fs");
+const path = require("path");
 
 const cards = JSON.parse(
   fs.readFileSync(__dirname + "/data/cards.json", "utf8")
@@ -40,10 +42,168 @@ const rarityIcons = {
   Mythical: "🔴"
 };
 
+const requiredEnvironmentVariables = [
+  "SLACK_SIGNING_SECRET",
+  "SLACK_CLIENT_ID",
+  "SLACK_CLIENT_SECRET",
+  "SLACK_STATE_SECRET",
+  "PUBLIC_BASE_URL"
+];
+
+const missingEnvironmentVariables = requiredEnvironmentVariables.filter(
+  name => !process.env[name]
+);
+
+if (missingEnvironmentVariables.length > 0) {
+  throw new Error(
+    `Missing required environment variables: ${missingEnvironmentVariables.join(", ")}`
+  );
+}
+
+const publicBaseUrl = process.env.PUBLIC_BASE_URL.replace(/\/+$/, "");
+const redirectUri = `${publicBaseUrl}/slack/oauth_redirect`;
+const installationStore = new FileInstallationStore({
+  baseDir: process.env.SLACK_INSTALLATION_STORE_PATH ||
+    path.join(__dirname, "data", "installations"),
+  clientId: process.env.SLACK_CLIENT_ID
+});
+
+const supportEmail = "john.rachwalski1@gmail.com";
+const siteStyles = `
+  :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #111827; color: #f9fafb; line-height: 1.6; }
+  main { width: min(760px, calc(100% - 32px)); margin: 64px auto; }
+  nav { display: flex; gap: 18px; margin-bottom: 48px; }
+  nav a, a { color: #93c5fd; }
+  h1 { font-size: clamp(2.2rem, 7vw, 4rem); line-height: 1.05; margin: 0 0 20px; }
+  h2 { margin-top: 36px; }
+  .card { background: #1f2937; border: 1px solid #374151; border-radius: 18px; padding: 28px; }
+  .button { display: inline-block; margin-top: 18px; padding: 12px 20px; border-radius: 10px;
+    background: #4f46e5; color: white; font-weight: 700; text-decoration: none; }
+  .muted { color: #cbd5e1; }
+  footer { margin-top: 48px; color: #94a3b8; font-size: .9rem; }
+`;
+
+function page(title, content) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${title} | SlackTCG</title>
+  <style>${siteStyles}</style>
+</head>
+<body>
+  <main>
+    <nav>
+      <a href="/">SlackTCG</a>
+      <a href="/support">Support</a>
+      <a href="/privacy">Privacy</a>
+    </nav>
+    ${content}
+    <footer>SlackTCG is an independent Slack app and is not affiliated with Slack Technologies.</footer>
+  </main>
+</body>
+</html>`;
+}
+
+function sendHtml(res, title, content) {
+  res.writeHead(200, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "public, max-age=300",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy":
+      "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+  });
+  res.end(page(title, content));
+}
+
+const customRoutes = [
+  {
+    path: "/",
+    method: "GET",
+    handler: (_req, res) => sendHtml(res, "Collect, trade, and play", `
+      <section class="card">
+        <p class="muted">A trading card game for Slack</p>
+        <h1>Open packs. Build a collection. Trade with friends.</h1>
+        <p>SlackTCG brings a lightweight card-collecting game into your workspace.
+          Open a daily pack, discover rare modifiers, browse your inventory, and
+          trade cards with other members using simple slash commands.</p>
+        <a class="button" href="/slack/install">Add SlackTCG to Slack</a>
+      </section>
+      <h2>What you can do</h2>
+      <ul>
+        <li>Open a free pack of five cards every 24 hours.</li>
+        <li>Collect Common, Rare, Epic, Legendary, and Mythical cards.</li>
+        <li>Find Gold, Shiny, and Rainbow variants.</li>
+        <li>Trade cards directly with other workspace members.</li>
+      </ul>
+    `)
+  },
+  {
+    path: "/privacy",
+    method: "GET",
+    handler: (_req, res) => sendHtml(res, "Privacy Policy", `
+      <h1>Privacy Policy</h1>
+      <p class="muted">Effective July 26, 2026</p>
+      <h2>Information SlackTCG processes</h2>
+      <p>SlackTCG stores Slack workspace and user identifiers, card inventory,
+        pack-opening timestamps, and OAuth installation credentials supplied by
+        Slack. It processes slash-command content when you use the app.</p>
+      <h2>How information is used</h2>
+      <p>This information is used only to authenticate installations, operate the
+        game, enforce pack cooldowns, display inventories, and complete trades.
+        SlackTCG does not sell personal information or use it for advertising.</p>
+      <h2>Storage and sharing</h2>
+      <p>Application data is stored on the service's private hosting environment.
+        It is shared only with Slack as necessary to provide the service or when
+        required by law.</p>
+      <h2>Retention and deletion</h2>
+      <p>Data is retained while needed to operate SlackTCG. Workspace owners or
+        users may request deletion of their associated data by contacting
+        <a href="mailto:${supportEmail}">${supportEmail}</a>.</p>
+      <h2>Contact</h2>
+      <p>Questions about this policy can be sent to
+        <a href="mailto:${supportEmail}">${supportEmail}</a>.</p>
+    `)
+  },
+  {
+    path: "/support",
+    method: "GET",
+    handler: (_req, res) => sendHtml(res, "Support", `
+      <h1>SlackTCG Support</h1>
+      <p>For installation help, bug reports, data-deletion requests, or other
+        questions, email <a href="mailto:${supportEmail}">${supportEmail}</a>.</p>
+      <h2>Quick help</h2>
+      <div class="card">
+        <p><strong>/slacktcg-help</strong> — View all commands.</p>
+        <p><strong>/slacktcg-pack</strong> — Open your daily pack.</p>
+        <p><strong>/slacktcg-inventory</strong> — View your collection.</p>
+        <p><strong>/slacktcg-trade @user card-name</strong> — Trade a card.</p>
+        <p><strong>/slacktcg-ping</strong> — Check whether the app is online.</p>
+      </div>
+      <h2>Response time</h2>
+      <p>Support requests are normally reviewed within three business days.</p>
+    `)
+  }
+];
+
 const app = new App({
-  token: process.env.SLACK_BOT_TOKEN,
-  appToken: process.env.SLACK_APP_TOKEN,
-  socketMode: true
+  signingSecret: process.env.SLACK_SIGNING_SECRET,
+  clientId: process.env.SLACK_CLIENT_ID,
+  clientSecret: process.env.SLACK_CLIENT_SECRET,
+  stateSecret: process.env.SLACK_STATE_SECRET,
+  scopes: ["commands"],
+  redirectUri,
+  installationStore,
+  customRoutes,
+  installerOptions: {
+    authVersion: "v2",
+    installPath: "/slack/install",
+    redirectUriPath: "/slack/oauth_redirect",
+    directInstall: true
+  }
 });
 
 
@@ -140,7 +300,7 @@ app.command("/slacktcg-pack", async ({ command, ack, respond }) => {
   }
 
 
-  const userId = command.user_id;
+  const userId = `${command.team_id}:${command.user_id}`;
 
   if (!users[userId]) {
     users[userId] = {
@@ -154,7 +314,7 @@ app.command("/slacktcg-pack", async ({ command, ack, respond }) => {
   const cooldown = getPackCooldown(user);
 
 
-  if (cooldown > 0 && command.user_id !== "U0BHV9ZKLBD") {
+  if (cooldown > 0) {
     const hours = Math.floor(cooldown / (1000 * 60 * 60));
     const minutes = Math.floor(
       (cooldown % (1000 * 60 * 60)) / (1000 * 60)
@@ -235,7 +395,7 @@ const rarityOrder = {
 app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
   await ack();
 
-  const userId = command.user_id;
+  const userId = `${command.team_id}:${command.user_id}`;
 
   if (!users[userId] || users[userId].cards.length === 0) {
     await respond({
@@ -311,7 +471,7 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
 app.command("/slacktcg-trade", async ({ command, ack, respond }) => {
   await ack();
 
-  const senderId = command.user_id;
+  const senderId = `${command.team_id}:${command.user_id}`;
 
   const firstSpace = command.text.indexOf(" ");
 
@@ -325,10 +485,11 @@ app.command("/slacktcg-trade", async ({ command, ack, respond }) => {
   const targetArg = command.text.substring(0, firstSpace);
   const cardArg = command.text.substring(firstSpace + 1).trim();
 
-  const targetId = targetArg
+  const targetSlackId = targetArg
     .replace("<@", "")
     .replace(">", "")
     .split("|")[0];
+  const targetId = `${command.team_id}:${targetSlackId}`;
 
   if (!users[senderId] || users[senderId].cards.length === 0) {
     await respond("❌ You don't have any cards.");
@@ -390,7 +551,7 @@ app.command("/slacktcg-trade", async ({ command, ack, respond }) => {
     text += `\n✨ Modifier: ${tradedCard.variant}`;
   }
 
-  text += `\n\nTo:\n<@${targetId}>`;
+  text += `\n\nTo:\n<@${targetSlackId}>`;
 
   await respond({
     text
@@ -400,6 +561,9 @@ app.command("/slacktcg-trade", async ({ command, ack, respond }) => {
 
 
 (async () => {
-  await app.start();
-  console.log("bot is running!");
+  const port = Number(process.env.PORT || 3000);
+  await app.start(port);
+  console.log(`SlackTCG is running on port ${port}`);
+  console.log(`Install URL: ${publicBaseUrl}/slack/install`);
+  console.log(`OAuth redirect URL: ${redirectUri}`);
 })();
