@@ -23,28 +23,21 @@ Rarest cards in the game: Rainbow Ethereal Dragon, Rainbow God Slayer, or Rainbo
 
 ![alt text](https://stardance.hackclub.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6MjA1MTM0LCJwdXIiOiJibG9iX2lkIn19--36ed88260394e82bd99a9ad94690a0affbe238c8/Screenshot%202026-07-25%20161904.png)
 
-## OAuth and deployment
+## Socket Mode setup
 
-SlackTCG uses Slack OAuth v2 and stores a separate installation for every
-workspace. Copy `.env.example` to `.env` and provide:
+SlackTCG uses Socket Mode, so it does not need a public request URL.
 
-- `SLACK_SIGNING_SECRET`, `SLACK_CLIENT_ID`, and `SLACK_CLIENT_SECRET` from the
-  Slack app's Basic Information page.
-- `SLACK_STATE_SECRET`, a long random secret used to protect the OAuth flow.
-- `PUBLIC_BASE_URL`, the HTTPS origin where this service is deployed, without a
-  trailing slash.
+1. In **OAuth & Permissions**, add the `commands` bot scope and install or
+   reinstall the app to the workspace.
+2. Copy the **Bot User OAuth Token** (`xoxb-...`).
+3. In **Basic Information > App-Level Tokens**, create a token with the
+   `connections:write` scope and copy the resulting `xapp-...` token.
+4. In **Socket Mode**, enable Socket Mode.
+5. Copy `.env.example` to `.env`, set `SLACK_BOT_TOKEN` and
+   `SLACK_APP_TOKEN`, then run:
 
-The production OAuth endpoints on Hack Club Nest are:
+   ```sh
+   npm start
+   ```
 
-- Install URL: `https://rachat.hackclub.app/slack/install`
-- Redirect URL: `https://rachat.hackclub.app/slack/oauth_redirect`
-- Slack request URL: `https://rachat.hackclub.app/slack/events`
-
-Add the Redirect URL under **OAuth & Permissions** in the Slack app settings.
-Set every slash command's Request URL to the Slack request URL. The production
-value of `SLACK_INSTALLATION_STORE_PATH` must point at persistent, private
-storage; OAuth tokens are written there at install time and the directory is
-excluded from Git.
-
-Do not set `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, or incoming webhook URLs.
-Each workspace must authorize the app through the Install URL.
+Slash commands do not need Request URLs while Socket Mode is enabled.
