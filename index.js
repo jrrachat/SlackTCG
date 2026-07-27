@@ -1,8 +1,9 @@
 require("dotenv").config();
 
 const { App } = require("@slack/bolt");
-const { FileInstallationStore } = require("@slack/oauth");
+const { FileInstallationStore, InstallProvider } = require("@slack/oauth");
 const fs = require("fs");
+const http = require("http");
 const path = require("path");
 
 const usersPath = __dirname + "/data/users.json";
@@ -35,8 +36,11 @@ const rarityIcons = {
 };
 
 const requiredEnvironmentVariables = [
-  "SLACK_BOT_TOKEN",
-  "SLACK_APP_TOKEN"
+  "SLACK_APP_TOKEN",
+  "SLACK_CLIENT_ID",
+  "SLACK_CLIENT_SECRET",
+  "SLACK_STATE_SECRET",
+  "PUBLIC_BASE_URL"
 ];
 
 const missingEnvironmentVariables = requiredEnvironmentVariables.filter(
@@ -106,12 +110,31 @@ async function getChannelMemberCards(client, channelId) {
     .filter(card => card.name);
 }
 
-const publicBaseUrl = (process.env.PUBLIC_BASE_URL || "http://localhost").replace(/\/+$/, "");
+const publicBaseUrl = process.env.PUBLIC_BASE_URL.replace(/\/+$/, "");
 const redirectUri = `${publicBaseUrl}/slack/oauth_redirect`;
 const installationStore = new FileInstallationStore({
   baseDir: process.env.SLACK_INSTALLATION_STORE_PATH ||
     path.join(__dirname, "data", "installations"),
   clientId: process.env.SLACK_CLIENT_ID
+});
+const installProvider = new InstallProvider({
+  clientId: process.env.SLACK_CLIENT_ID,
+  clientSecret: process.env.SLACK_CLIENT_SECRET,
+  stateSecret: process.env.SLACK_STATE_SECRET,
+  installationStore,
+  authVersion: "v2",
+  directInstall: true,
+  installUrlOptions: {
+    scopes: [
+      "commands",
+      "users:read",
+      "channels:read",
+      "groups:read",
+      "im:read",
+      "mpim:read"
+    ],
+    redirectUri
+  }
 });
 
 const supportEmail = "john.rachwalski1@gmail.com";
@@ -236,9 +259,9 @@ const customRoutes = [
 ];
 
 const app = new App({
-  token: process.env.SLACK_BOT_TOKEN,
   appToken: process.env.SLACK_APP_TOKEN,
-  socketMode: true
+  socketMode: true,
+  authorize: source => installProvider.authorize(source)
 });
 
 
@@ -585,6 +608,50 @@ app.command("/slacktcg-trade", async ({ command, ack, respond }) => {
 
 
 (async () => {
+  const port = Number(process.env.PORT || 3000);
+  const oauthServer = http.createServer(async (req, res) => {
+    try {
+      const pathname = new URL(req.url, publicBaseUrl).pathname;
+
+      if (req.method === "GET" && pathname === "/slack/install") {
+        await installProvider.handleInstallPath(req, res);
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/slack/oauth_redirect") {
+        await installProvider.handleCallback(req, res);
+        return;
+      }
+
+      const customRoute = customRoutes.find(
+        route => route.method === req.method && route.path === pathname
+      );
+
+      if (customRoute) {
+        customRoute.handler(req, res);
+        return;
+      }
+
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Not found");
+    } catch (error) {
+      console.error("HTTP request failed", error);
+
+      if (!res.headersSent) {
+        res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+      }
+
+      res.end("Internal server error");
+    }
+  });
+
+  await new Promise((resolve, reject) => {
+    oauthServer.once("error", reject);
+    oauthServer.listen(port, resolve);
+  });
+
   await app.start();
   console.log("SlackTCG is connected through Socket Mode");
+  console.log(`Install URL: ${publicBaseUrl}/slack/install`);
+  console.log(`OAuth redirect URL: ${redirectUri}`);
 })();
