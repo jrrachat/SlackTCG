@@ -35,16 +35,52 @@ function getPackCooldown(user) {
   return Math.max(0, PACK_COOLDOWN - (Date.now() - user.lastPack));
 }
 
-function isLuckyHour(channelName, timestamp = Date.now()) {
-  if (channelName !== "gaming") return false;
+function getHourKey(timestamp = Date.now()) {
+  return new Date(timestamp).toISOString().slice(0, 13);
+}
 
-  const hour = new Date(timestamp).toISOString().slice(0, 13);
+function isLuckyHour(timestamp = Date.now()) {
   const digest = crypto
     .createHmac("sha256", process.env.SLACK_STATE_SECRET)
-    .update(`lucky-hour:${hour}`)
+    .update(`lucky-hour:${getHourKey(timestamp)}`)
     .digest();
 
   return digest.readUInt32BE(0) / 0x100000000 < 0.1;
+}
+
+const announcedLuckyHours = new Set();
+
+async function announceLuckyHour(client, teamId) {
+  const announcementKey = `${teamId}:${getHourKey()}`;
+
+  if (announcedLuckyHours.has(announcementKey)) return;
+
+  let cursor;
+
+  do {
+    const response = await client.conversations.list({
+      types: "public_channel",
+      exclude_archived: true,
+      cursor,
+      limit: 200
+    });
+    const gamingChannel = response.channels.find(
+      channel => channel.name === "gaming"
+    );
+
+    if (gamingChannel) {
+      await client.chat.postMessage({
+        channel: gamingChannel.id,
+        text: "🍀 *LUCKY HOUR!* For the rest of this hour, rare-card and special-modifier odds are tripled in every channel!"
+      });
+      announcedLuckyHours.add(announcementKey);
+      return;
+    }
+
+    cursor = response.response_metadata?.next_cursor || undefined;
+  } while (cursor);
+
+  console.warn("Lucky Hour could not be announced because #gaming was not found");
 }
 
 const rarityIcons = {
@@ -190,7 +226,8 @@ const installProvider = new InstallProvider({
       "channels:read",
       "groups:read",
       "im:read",
-      "mpim:read"
+      "mpim:read",
+      "chat:write"
     ],
     redirectUri
   }
@@ -365,7 +402,15 @@ Modifier Rarities: Normal 96%, Gold 3%, Shiny 0.9%, Rainbow 0.1%`
 app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
   await ack();
 
-  const luckyHour = isLuckyHour(command.channel_name);
+  const luckyHour = isLuckyHour();
+
+  if (luckyHour) {
+    try {
+      await announceLuckyHour(client, command.team_id);
+    } catch (error) {
+      console.error("Could not announce Lucky Hour in #gaming", error);
+    }
+  }
   const rarityWeights = [
     { rarity: "Common", chance: 60 },
     { rarity: "Rare", chance: 25 },
@@ -518,7 +563,7 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "🍀 *LUCKY HOUR!* Rare-card and special-modifier odds are tripled in #gaming."
+              text: "🍀 *LUCKY HOUR!* Rare-card and special-modifier odds are tripled in every channel."
             }
           }]
         : []),
