@@ -43,11 +43,8 @@ const rarityIcons = {
 };
 
 const requiredEnvironmentVariables = [
-  "SLACK_SIGNING_SECRET",
-  "SLACK_CLIENT_ID",
-  "SLACK_CLIENT_SECRET",
-  "SLACK_STATE_SECRET",
-  "PUBLIC_BASE_URL"
+  "SLACK_BOT_TOKEN",
+  "SLACK_APP_TOKEN"
 ];
 
 const missingEnvironmentVariables = requiredEnvironmentVariables.filter(
@@ -60,7 +57,7 @@ if (missingEnvironmentVariables.length > 0) {
   );
 }
 
-const publicBaseUrl = process.env.PUBLIC_BASE_URL.replace(/\/+$/, "");
+const publicBaseUrl = (process.env.PUBLIC_BASE_URL || "http://localhost").replace(/\/+$/, "");
 const redirectUri = `${publicBaseUrl}/slack/oauth_redirect`;
 const installationStore = new FileInstallationStore({
   baseDir: process.env.SLACK_INSTALLATION_STORE_PATH ||
@@ -190,20 +187,9 @@ const customRoutes = [
 ];
 
 const app = new App({
-  signingSecret: process.env.SLACK_SIGNING_SECRET,
-  clientId: process.env.SLACK_CLIENT_ID,
-  clientSecret: process.env.SLACK_CLIENT_SECRET,
-  stateSecret: process.env.SLACK_STATE_SECRET,
-  scopes: ["commands"],
-  redirectUri,
-  installationStore,
-  customRoutes,
-  installerOptions: {
-    authVersion: "v2",
-    installPath: "/slack/install",
-    redirectUriPath: "/slack/oauth_redirect",
-    directInstall: true
-  }
+  token: process.env.SLACK_BOT_TOKEN,
+  appToken: process.env.SLACK_APP_TOKEN,
+  socketMode: true
 });
 
 
@@ -561,9 +547,6 @@ app.command("/slacktcg-trade", async ({ command, ack, respond }) => {
 
 
 (async () => {
-  const port = Number(process.env.PORT || 3000);
-  await app.start(port);
-  console.log(`SlackTCG is running on port ${port}`);
-  console.log(`Install URL: ${publicBaseUrl}/slack/install`);
-  console.log(`OAuth redirect URL: ${redirectUri}`);
+  await app.start();
+  console.log("SlackTCG is connected through Socket Mode");
 })();
