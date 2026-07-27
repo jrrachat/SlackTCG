@@ -601,6 +601,7 @@ app.command("/slacktcg-trade", async ({ command, ack, respond }) => {
   text += `\n\nTo:\n<@${targetSlackId}>`;
 
   await respond({
+    response_type: "in_channel",
     text
   });
 });
