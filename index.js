@@ -110,6 +110,44 @@ async function getChannelMemberCards(client, channelId) {
     .filter(card => card.name);
 }
 
+async function resolveSlackUserId(client, target) {
+  const mentionMatch = target.match(/^<@([A-Z0-9]+)(?:\|[^>]+)?>$/i);
+
+  if (mentionMatch) {
+    return mentionMatch[1];
+  }
+
+  const requestedName = target.replace(/^@/, "").trim().toLowerCase();
+  let cursor;
+
+  do {
+    const response = await client.users.list({
+      cursor,
+      limit: 200
+    });
+    const matchingUser = response.members.find(member => {
+      const profile = member.profile || {};
+      const names = [
+        member.name,
+        profile.display_name,
+        profile.real_name
+      ];
+
+      return !member.deleted && names.some(
+        name => name && name.toLowerCase() === requestedName
+      );
+    });
+
+    if (matchingUser) {
+      return matchingUser.id;
+    }
+
+    cursor = response.response_metadata?.next_cursor || undefined;
+  } while (cursor);
+
+  return null;
+}
+
 const publicBaseUrl = process.env.PUBLIC_BASE_URL.replace(/\/+$/, "");
 const redirectUri = `${publicBaseUrl}/slack/oauth_redirect`;
 const installationStore = new FileInstallationStore({
@@ -515,7 +553,7 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
   });
 });
 
-app.command("/slacktcg-trade", async ({ command, ack, respond }) => {
+app.command("/slacktcg-trade", async ({ command, ack, respond, client }) => {
   await ack();
 
   const senderId = `${command.team_id}:${command.user_id}`;
@@ -532,10 +570,15 @@ app.command("/slacktcg-trade", async ({ command, ack, respond }) => {
   const targetArg = command.text.substring(0, firstSpace);
   const cardArg = command.text.substring(firstSpace + 1).trim();
 
-  const targetSlackId = targetArg
-    .replace("<@", "")
-    .replace(">", "")
-    .split("|")[0];
+  const targetSlackId = await resolveSlackUserId(client, targetArg);
+
+  if (!targetSlackId) {
+    await respond(
+      "❌ I couldn't find that user. Select them from Slack's @mention autocomplete and try again."
+    );
+    return;
+  }
+
   const targetId = `${command.team_id}:${targetSlackId}`;
 
   if (!users[senderId] || users[senderId].cards.length === 0) {
