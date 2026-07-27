@@ -104,7 +104,8 @@ async function getChannelMemberCards(client, channelId) {
       return {
         id: `member:${member.id}`,
         memberId: member.id,
-        name: fullName || profile.real_name || profile.display_name || member.real_name || member.name
+        name: fullName || profile.real_name || profile.display_name || member.real_name || member.name,
+        imageUrl: profile.image_512 || profile.image_192 || profile.image_72
       };
     })
     .filter(card => card.name);
@@ -431,9 +432,8 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
   saveUsers();
 
 
-  const packText = pack
-    .map(card => {
-
+  const packBlocks = pack
+    .flatMap(card => {
       let text =
         `🃏 *${card.name}*
 ${rarityIcons[card.rarity]} *${card.rarity}*`;
@@ -442,10 +442,26 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
         text += `\n✨ Modifier: ${card.variant}`;
       }
 
-      return text;
+      const blocks = [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text
+          }
+        }
+      ];
 
-    })
-    .join("\n\n");
+      if (card.imageUrl) {
+        blocks.push({
+          type: "image",
+          image_url: card.imageUrl,
+          alt_text: `${card.name} profile photo`
+        });
+      }
+
+      return blocks;
+    });
 
 
   await respond({
@@ -457,13 +473,7 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
           text: "🎴 SlackTCG Pack Opened!"
         }
       },
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: packText
-        }
-      }
+      ...packBlocks
     ]
   });
 
