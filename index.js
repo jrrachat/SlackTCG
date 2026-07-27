@@ -442,25 +442,23 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
         text += `\n✨ Modifier: ${card.variant}`;
       }
 
-      const blocks = [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text
-          }
+      const cardBlock = {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text
         }
-      ];
+      };
 
       if (card.imageUrl) {
-        blocks.push({
+        cardBlock.accessory = {
           type: "image",
           image_url: card.imageUrl,
           alt_text: `${card.name} profile photo`
-        });
+        };
       }
 
-      return blocks;
+      return [cardBlock];
     });
 
 
