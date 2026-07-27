@@ -1,4 +1,5 @@
 node_modules
 .env
 data/users.json
+data/stats.json
 data/installations/

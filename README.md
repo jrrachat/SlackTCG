@@ -23,6 +23,9 @@ in every channel.
 
 `/slacktcg-inventory` — View your card collection.
 
+`/slacktcg-leaderboard` — View the top pack openers, top Mythical collectors,
+and the rarest card ever pulled.
+
 `/slacktcg-trade @user <card>` — Trade one of your cards to another user by entering their username and the member's first and last name, including the modifier if the card has one (for a shiny Jane Doe card, `Jane Doe-shiny`).
 
 

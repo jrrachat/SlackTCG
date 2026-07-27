@@ -8,11 +8,15 @@ const http = require("http");
 const path = require("path");
 
 const usersPath = __dirname + "/data/users.json";
+const statsPath = __dirname + "/data/stats.json";
 const PACK_COOLDOWN = 60 * 1000;
 
 let users = JSON.parse(
   fs.readFileSync(usersPath, "utf8")
 );
+let stats = fs.existsSync(statsPath)
+  ? JSON.parse(fs.readFileSync(statsPath, "utf8"))
+  : { teams: {} };
 
 let removedLegacyCards = false;
 
@@ -27,6 +31,51 @@ function saveUsers() {
     usersPath,
     JSON.stringify(users, null, 2)
   );
+}
+
+function saveStats() {
+  fs.writeFileSync(
+    statsPath,
+    JSON.stringify(stats, null, 2)
+  );
+}
+
+function getCardPrestige(card) {
+  const rarityRank = {
+    Common: 1,
+    Rare: 2,
+    Epic: 3,
+    Legendary: 4,
+    Mythical: 5
+  };
+  const variantRank = {
+    Normal: 0,
+    "🟨 Gold": 1,
+    "✨ Shiny": 2,
+    "🌈 Rainbow": 3
+  };
+
+  return (rarityRank[card.rarity] || 0) * 10 +
+    (variantRank[card.variant] || 0);
+}
+
+function recordPackStats(teamId, slackUserId, pack) {
+  const teamStats = stats.teams[teamId] ||= {};
+
+  for (const card of pack) {
+    const prestige = getCardPrestige(card);
+
+    if (!teamStats.rarestPull || prestige > teamStats.rarestPull.prestige) {
+      teamStats.rarestPull = {
+        card,
+        prestige,
+        pulledBy: slackUserId,
+        pulledAt: Date.now()
+      };
+    }
+  }
+
+  saveStats();
 }
 
 function getPackCooldown(user) {
@@ -390,6 +439,9 @@ Open your daily pack
 /slacktcg-inventory
 View your collection
 
+/slacktcg-leaderboard
+View the workspace's pack, Mythical, and rarest-pull leaders
+
 /slacktcg-trade @user <card>
 Trade a member card by first and last name. Add -gold, -shiny, or -rainbow to trade a modified card.
 
@@ -515,7 +567,9 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
   }
 
   users[userId].cards.push(...pack);
+  user.packsOpened = (user.packsOpened || 0) + 1;
   user.lastPack = Date.now();
+  recordPackStats(command.team_id, command.user_id, pack);
   saveUsers();
 
 
@@ -651,6 +705,93 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
         text: {
           type: "mrkdwn",
           text: inventoryText
+        }
+      }
+    ]
+  });
+});
+
+app.command("/slacktcg-leaderboard", async ({ command, ack, respond }) => {
+  await ack();
+
+  const teamPrefix = `${command.team_id}:`;
+  const workspaceUsers = Object.entries(users)
+    .filter(([key]) => key.startsWith(teamPrefix))
+    .map(([key, user]) => ({
+      slackUserId: key.slice(teamPrefix.length),
+      packsOpened: user.packsOpened || 0,
+      mythicals: (user.cards || []).filter(
+        card => card.rarity === "Mythical"
+      ).length
+    }));
+
+  const topPackOpeners = [...workspaceUsers]
+    .filter(user => user.packsOpened > 0)
+    .sort((a, b) => b.packsOpened - a.packsOpened)
+    .slice(0, 3);
+  const topMythicalOwners = [...workspaceUsers]
+    .filter(user => user.mythicals > 0)
+    .sort((a, b) => b.mythicals - a.mythicals)
+    .slice(0, 3);
+  const rarestPull = stats.teams[command.team_id]?.rarestPull;
+
+  const formatRanking = (ranking, property, singular, plural) =>
+    ranking.length > 0
+      ? ranking.map((user, index) => {
+          const count = user[property];
+          return `${index + 1}. <@${user.slackUserId}> — ${count} ${count === 1 ? singular : plural}`;
+        }).join("\n")
+      : "_No qualifying players yet._";
+
+  let rarestPullText = "_No cards have been recorded yet._";
+
+  if (rarestPull) {
+    const card = rarestPull.card;
+    rarestPullText =
+      `🃏 *${card.name}*\n` +
+      `${rarityIcons[card.rarity]} *${card.rarity}*` +
+      (card.variant !== "Normal" ? ` · ${card.variant}` : "") +
+      `\nPulled by <@${rarestPull.pulledBy}>`;
+  }
+
+  await respond({
+    blocks: [
+      {
+        type: "header",
+        text: {
+          type: "plain_text",
+          text: "🏆 SlackTCG Leaderboard"
+        }
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*Most Packs Opened*\n${formatRanking(
+            topPackOpeners,
+            "packsOpened",
+            "pack",
+            "packs"
+          )}`
+        }
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*Most Mythicals Owned*\n${formatRanking(
+            topMythicalOwners,
+            "mythicals",
+            "Mythical",
+            "Mythicals"
+          )}`
+        }
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*Rarest Card Ever Pulled*\n${rarestPullText}`
         }
       }
     ]
