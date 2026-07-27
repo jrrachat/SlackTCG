@@ -7,10 +7,6 @@ const path = require("path");
 
 const usersPath = __dirname + "/data/users.json";
 
-const PACK_COOLDOWN = 24 * 60 * 60 * 1000;
-const packCooldownExemptUserId =
-  process.env.PACK_COOLDOWN_EXEMPT_USER_ID || "U0BHV9ZKLBD";
-
 let users = JSON.parse(
   fs.readFileSync(usersPath, "utf8")
 );
@@ -28,14 +24,6 @@ function saveUsers() {
     usersPath,
     JSON.stringify(users, null, 2)
   );
-}
-
-function getPackCooldown(user) {
-  if (!user.lastPack) return 0;
-
-  const remaining = PACK_COOLDOWN - (Date.now() - user.lastPack);
-
-  return remaining > 0 ? remaining : 0;
 }
 
 const rarityIcons = {
@@ -211,7 +199,7 @@ const customRoutes = [
         Slack. It processes slash-command content when you use the app.</p>
       <h2>How information is used</h2>
       <p>This information is used only to authenticate installations, operate the
-        game, enforce pack cooldowns, display inventories, and complete trades.
+        game, display inventories, and complete trades.
         SlackTCG does not sell personal information or use it for advertising.</p>
       <h2>Storage and sharing</h2>
       <p>Application data is stored on the service's private hosting environment.
@@ -341,28 +329,8 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
 
   if (!users[userId]) {
     users[userId] = {
-      cards: [],
-      lastPack: 0
+      cards: []
     };
-  }
-
-  const user = users[userId];
-
-  const cooldown = command.user_id === packCooldownExemptUserId
-    ? 0
-    : getPackCooldown(user);
-
-
-  if (cooldown > 0) {
-    const hours = Math.floor(cooldown / (1000 * 60 * 60));
-    const minutes = Math.floor(
-      (cooldown % (1000 * 60 * 60)) / (1000 * 60)
-    );
-
-    await respond(
-      `⏳ You already opened a pack! Come back in ${hours}h ${minutes}m.`
-    );
-    return;
   }
 
   let memberCards;
@@ -399,7 +367,6 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
   }
 
   users[userId].cards.push(...pack);
-  user.lastPack = Date.now();
   saveUsers();
 
 
@@ -439,8 +406,6 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
     ]
   });
 
-  user.lastPack = Date.now();
-  saveUsers();
 });
 const rarityOrder = {
   Mythical: 0,

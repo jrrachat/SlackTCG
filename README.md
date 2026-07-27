@@ -36,8 +36,7 @@ SlackTCG uses Socket Mode, so it does not need a public request URL.
    `connections:write` scope and copy the resulting `xapp-...` token.
 4. In **Socket Mode**, enable Socket Mode.
 5. Copy `.env.example` to `.env`, set `SLACK_BOT_TOKEN` and
-   `SLACK_APP_TOKEN`, and leave `PACK_COOLDOWN_EXEMPT_USER_ID` set to the Slack
-   user ID that should be allowed to open packs without a timer. Then run:
+   `SLACK_APP_TOKEN`, then run:
 
    ```sh
    npm start
