@@ -8,6 +8,8 @@ const path = require("path");
 const usersPath = __dirname + "/data/users.json";
 
 const PACK_COOLDOWN = 24 * 60 * 60 * 1000;
+const packCooldownExemptUserId =
+  process.env.PACK_COOLDOWN_EXEMPT_USER_ID || "U0BHV9ZKLBD";
 
 let users = JSON.parse(
   fs.readFileSync(usersPath, "utf8")
@@ -346,7 +348,9 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
 
   const user = users[userId];
 
-  const cooldown = getPackCooldown(user);
+  const cooldown = command.user_id === packCooldownExemptUserId
+    ? 0
+    : getPackCooldown(user);
 
 
   if (cooldown > 0) {
