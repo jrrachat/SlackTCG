@@ -7,6 +7,7 @@ const http = require("http");
 const path = require("path");
 
 const usersPath = __dirname + "/data/users.json";
+const PACK_COOLDOWN = 60 * 1000;
 
 let users = JSON.parse(
   fs.readFileSync(usersPath, "utf8")
@@ -25,6 +26,12 @@ function saveUsers() {
     usersPath,
     JSON.stringify(users, null, 2)
   );
+}
+
+function getPackCooldown(user) {
+  if (!user.lastPack) return 0;
+
+  return Math.max(0, PACK_COOLDOWN - (Date.now() - user.lastPack));
 }
 
 const rarityIcons = {
@@ -395,6 +402,16 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
     };
   }
 
+  const user = users[userId];
+  const cooldown = getPackCooldown(user);
+
+  if (cooldown > 0) {
+    await respond(
+      `⏳ You can open another pack in ${Math.ceil(cooldown / 1000)} seconds.`
+    );
+    return;
+  }
+
   let memberCards;
 
   try {
@@ -429,6 +446,7 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
   }
 
   users[userId].cards.push(...pack);
+  user.lastPack = Date.now();
   saveUsers();
 
 
