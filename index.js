@@ -443,7 +443,7 @@ View your collection
 View the workspace's pack, Mythical, and rarest-pull leaders
 
 /slacktcg-trade @user <card>
-Trade a member card by first and last name. Add -gold, -shiny, or -rainbow to trade a modified card.
+Trade a member card by first and last name. Capitalization, spaces, and hyphens are optional. Add normal, gold, shiny, or rainbow to specify the modifier.
 
 Card Rarities: Common 60%, Rare 25%, Epic 10%, Legendary 4%, Mythical 1%
 Modifier Rarities: Normal 96%, Gold 3%, Shiny 0.9%, Rainbow 0.1%`
@@ -635,6 +635,93 @@ const rarityOrder = {
   Common: 5
 };
 
+function normalizeCardName(value) {
+  return value.toLowerCase().replace(/[\s_-]+/g, "");
+}
+
+function getEditDistance(left, right) {
+  const previous = Array.from(
+    { length: right.length + 1 },
+    (_, index) => index
+  );
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex++) {
+    const current = [leftIndex];
+
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex++) {
+      current[rightIndex] = Math.min(
+        current[rightIndex - 1] + 1,
+        previous[rightIndex] + 1,
+        previous[rightIndex - 1] +
+          (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1)
+      );
+    }
+
+    previous.splice(0, previous.length, ...current);
+  }
+
+  return previous[right.length];
+}
+
+function findTradeCard(cards, cardArg) {
+  const variants = {
+    normal: "Normal",
+    gold: "🟨 Gold",
+    shiny: "✨ Shiny",
+    rainbow: "🌈 Rainbow"
+  };
+  const explicitVariant = cardArg.match(
+    /^(.*?)[\s_-]+(normal|gold|shiny|rainbow)\s*$/i
+  );
+  let candidates;
+
+  if (explicitVariant) {
+    const requestedName = normalizeCardName(explicitVariant[1]);
+    const requestedVariant = variants[explicitVariant[2].toLowerCase()];
+    candidates = cards
+      .map((card, index) => ({ card, index }))
+      .filter(({ card }) => card.variant === requestedVariant)
+      .map(match => ({
+        ...match,
+        distance: getEditDistance(
+          normalizeCardName(match.card.name),
+          requestedName
+        )
+      }));
+  } else {
+    const requestedCard = normalizeCardName(cardArg);
+    candidates = cards
+      .map((card, index) => ({ card, index }))
+      .map(match => {
+        const card = match.card;
+        const modifier = card.variant === "Normal"
+          ? ""
+          : card.variant.replace(/^[^A-Za-z]+/, "");
+
+        return {
+          ...match,
+          distance: getEditDistance(
+            normalizeCardName(`${card.name}${modifier}`),
+            requestedCard
+          )
+        };
+      });
+  }
+
+  const exactMatches = candidates.filter(match => match.distance === 0);
+  const matches = exactMatches.length > 0
+    ? exactMatches
+    : candidates.filter(match => match.distance === 1);
+  const uniqueMatches = new Map();
+
+  for (const match of matches) {
+    const key = `${match.card.name.toLowerCase()}:${match.card.variant}`;
+    if (!uniqueMatches.has(key)) uniqueMatches.set(key, match);
+  }
+
+  return [...uniqueMatches.values()];
+}
+
 app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
   await ack();
 
@@ -662,7 +749,7 @@ app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
     grouped[key].count++;
   }
 
-  const inventoryText = Object.values(grouped)
+  const inventoryEntries = Object.values(grouped)
     .sort((a, b) => {
       // Sort by rarity
       const rarityDiff =
@@ -688,8 +775,32 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
       }
 
       return text;
-    })
-    .join("\n\n────────────\n\n");
+    });
+  const separator = "\n\n────────────\n\n";
+  const inventoryChunks = [];
+  let currentChunk = "";
+
+  for (const entry of inventoryEntries) {
+    const nextChunk = currentChunk
+      ? `${currentChunk}${separator}${entry}`
+      : entry;
+
+    if (nextChunk.length > 2800 && currentChunk) {
+      inventoryChunks.push(currentChunk);
+      currentChunk = entry;
+    } else {
+      currentChunk = nextChunk;
+    }
+  }
+
+  if (currentChunk) inventoryChunks.push(currentChunk);
+
+  const visibleChunks = inventoryChunks.slice(0, 49);
+
+  if (inventoryChunks.length > 49) {
+    visibleChunks[48] =
+      `${visibleChunks[48]}\n\n_Inventory truncated because it is too large for one Slack message._`;
+  }
 
   await respond({
     blocks: [
@@ -700,13 +811,13 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
           text: "🎒 Your SlackTCG Inventory"
         }
       },
-      {
+      ...visibleChunks.map(text => ({
         type: "section",
         text: {
           type: "mrkdwn",
-          text: inventoryText
+          text
         }
-      }
+      }))
     ]
   });
 });
@@ -837,40 +948,26 @@ app.command("/slacktcg-trade", async ({ command, ack, respond, client }) => {
     };
   }
 
-  let name = cardArg;
-  let variant = "Normal";
+  const matchingCards = findTradeCard(users[senderId].cards, cardArg);
 
-  const lower = cardArg.toLowerCase();
-
-  if (lower.endsWith("-rainbow")) {
-    variant = "🌈 Rainbow";
-    name = cardArg.slice(0, -9);
-  } else if (lower.endsWith("-shiny")) {
-    variant = "✨ Shiny";
-    name = cardArg.slice(0, -7);
-  } else if (lower.endsWith("-gold")) {
-    variant = "🟨 Gold";
-    name = cardArg.slice(0, -5);
-  }
-
-  name = name.trim();
-
-  const cardIndex = users[senderId].cards.findIndex(card =>
-    card.name.toLowerCase() === name.toLowerCase() &&
-    card.variant === variant
-  );
-
-  if (cardIndex === -1) {
+  if (matchingCards.length === 0) {
     await respond(
-      `❌ You don't own a ${variant === "Normal"
-        ? name
-        : `${name} (${variant})`
-      }.`
+      `❌ You don't own a card matching "${cardArg}".`
     );
     return;
   }
 
-  const tradedCard = users[senderId].cards.splice(cardIndex, 1)[0];
+  if (matchingCards.length > 1) {
+    await respond(
+      "❌ That card name is ambiguous. Add `-normal`, `-gold`, `-shiny`, or `-rainbow` to specify the exact card."
+    );
+    return;
+  }
+
+  const tradedCard = users[senderId].cards.splice(
+    matchingCards[0].index,
+    1
+  )[0];
 
   users[targetId].cards.push(tradedCard);
 

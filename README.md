@@ -26,7 +26,11 @@ in every channel.
 `/slacktcg-leaderboard` — View the top pack openers, top Mythical collectors,
 and the rarest card ever pulled.
 
-`/slacktcg-trade @user <card>` — Trade one of your cards to another user by entering their username and the member's first and last name, including the modifier if the card has one (for a shiny Jane Doe card, `Jane Doe-shiny`).
+`/slacktcg-trade @user <card>` — Trade one of your cards to another user.
+Capitalization, spaces, and hyphens are optional, so `Jane Doe-shiny`,
+`janedoe shiny`, and `JANE DOE SHINY` all work. Use `-normal`, `-gold`,
+`-shiny`, or `-rainbow` when a name could otherwise be ambiguous. A unique
+one-character typo is also accepted.
 
 
 ![alt text](https://stardance.hackclub.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6MjA1MTM0LCJwdXIiOiJibG9iX2lkIn19--36ed88260394e82bd99a9ad94690a0affbe238c8/Screenshot%202026-07-25%20161904.png)
