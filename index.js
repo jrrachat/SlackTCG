@@ -5,33 +5,25 @@ const { FileInstallationStore } = require("@slack/oauth");
 const fs = require("fs");
 const path = require("path");
 
-const cards = JSON.parse(
-  fs.readFileSync(__dirname + "/data/cards.json", "utf8")
-);
-
-console.log(`Loaded ${cards.length} cards`);
-
 const usersPath = __dirname + "/data/users.json";
-
-const PACK_COOLDOWN = 24 * 60 * 60 * 1000;
 
 let users = JSON.parse(
   fs.readFileSync(usersPath, "utf8")
 );
+
+let removedLegacyCards = false;
+
+for (const user of Object.values(users)) {
+  const currentCards = user.cards || [];
+  user.cards = currentCards.filter(card => card.memberId);
+  removedLegacyCards ||= user.cards.length !== currentCards.length;
+}
 
 function saveUsers() {
   fs.writeFileSync(
     usersPath,
     JSON.stringify(users, null, 2)
   );
-}
-
-function getPackCooldown(user) {
-  if (!user.lastPack) return 0;
-
-  const remaining = PACK_COOLDOWN - (Date.now() - user.lastPack);
-
-  return remaining > 0 ? remaining : 0;
 }
 
 const rarityIcons = {
@@ -55,6 +47,63 @@ if (missingEnvironmentVariables.length > 0) {
   throw new Error(
     `Missing required environment variables: ${missingEnvironmentVariables.join(", ")}`
   );
+}
+
+if (removedLegacyCards) {
+  saveUsers();
+}
+
+async function getChannelMemberCards(client, channelId) {
+  const memberIds = [];
+  let cursor;
+
+  do {
+    const response = await client.conversations.members({
+      channel: channelId,
+      cursor,
+      limit: 200
+    });
+
+    memberIds.push(...response.members);
+    cursor = response.response_metadata?.next_cursor || undefined;
+  } while (cursor);
+
+  const channelMemberIds = new Set(memberIds);
+  const members = [];
+  cursor = undefined;
+
+  do {
+    const response = await client.users.list({
+      cursor,
+      limit: 200
+    });
+
+    members.push(...response.members);
+    cursor = response.response_metadata?.next_cursor || undefined;
+  } while (cursor);
+
+  return members
+    .filter(member =>
+      member &&
+      channelMemberIds.has(member.id) &&
+      !member.deleted &&
+      !member.is_bot &&
+      member.id !== "USLACKBOT"
+    )
+    .map(member => {
+      const profile = member.profile || {};
+      const fullName = [profile.first_name, profile.last_name]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+
+      return {
+        id: `member:${member.id}`,
+        memberId: member.id,
+        name: fullName || profile.real_name || profile.display_name || member.real_name || member.name
+      };
+    })
+    .filter(card => card.name);
 }
 
 const publicBaseUrl = (process.env.PUBLIC_BASE_URL || "http://localhost").replace(/\/+$/, "");
@@ -150,7 +199,7 @@ const customRoutes = [
         Slack. It processes slash-command content when you use the app.</p>
       <h2>How information is used</h2>
       <p>This information is used only to authenticate installations, operate the
-        game, enforce pack cooldowns, display inventories, and complete trades.
+        game, display inventories, and complete trades.
         SlackTCG does not sell personal information or use it for advertising.</p>
       <h2>Storage and sharing</h2>
       <p>Application data is stored on the service's private hosting environment.
@@ -223,7 +272,7 @@ Open your daily pack
 View your collection
 
 /slacktcg-trade @user <card>
-Trade a specific card by using title. If the card has a modifier, it would look like ghoul-shiny or rock golem-shiny (include spaces if title has them)
+Trade a member card by first and last name. Add -gold, -shiny, or -rainbow to trade a modified card.
 
 Card Rarities: Common 60%, Rare 25%, Epic 10%, Legendary 4%, Mythical 1%
 Modifier Rarities: Normal 96%, Gold 3%, Shiny 0.9%, Rainbow 0.1%`
@@ -231,7 +280,7 @@ Modifier Rarities: Normal 96%, Gold 3%, Shiny 0.9%, Rainbow 0.1%`
 });
 
 
-app.command("/slacktcg-pack", async ({ command, ack, respond }) => {
+app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
   await ack();
 
   const rarityChances = [
@@ -257,16 +306,6 @@ app.command("/slacktcg-pack", async ({ command, ack, respond }) => {
   }
 
 
-  function getRandomCard(rarity) {
-    const possibleCards = cards.filter(
-      card => card.rarity === rarity
-    );
-
-    return possibleCards[
-      Math.floor(Math.random() * possibleCards.length)
-    ];
-  }
-
   function getVariant() {
     const roll = Math.random() * 100;
 
@@ -290,25 +329,24 @@ app.command("/slacktcg-pack", async ({ command, ack, respond }) => {
 
   if (!users[userId]) {
     users[userId] = {
-      cards: [],
-      lastPack: 0
+      cards: []
     };
   }
 
-  const user = users[userId];
+  let memberCards;
 
-  const cooldown = getPackCooldown(user);
-
-
-  if (cooldown > 0) {
-    const hours = Math.floor(cooldown / (1000 * 60 * 60));
-    const minutes = Math.floor(
-      (cooldown % (1000 * 60 * 60)) / (1000 * 60)
-    );
-
+  try {
+    memberCards = await getChannelMemberCards(client, command.channel_id);
+  } catch (error) {
+    console.error("Could not load channel members", error);
     await respond(
-      `⏳ You already opened a pack! Come back in ${hours}h ${minutes}m.`
+      "❌ I couldn't load this channel's members. Check that the app has the required channel and user scopes."
     );
+    return;
+  }
+
+  if (memberCards.length === 0) {
+    await respond("❌ This channel has no eligible members to use as cards.");
     return;
   }
 
@@ -317,16 +355,18 @@ app.command("/slacktcg-pack", async ({ command, ack, respond }) => {
   for (let i = 0; i < 5; i++) {
 
     const rarity = getRandomRarity();
-    const card = getRandomCard(rarity);
+    const card = memberCards[
+      Math.floor(Math.random() * memberCards.length)
+    ];
 
     pack.push({
       ...card,
+      rarity,
       variant: getVariant()
     });
   }
 
   users[userId].cards.push(...pack);
-  user.lastPack = Date.now();
   saveUsers();
 
 
@@ -366,8 +406,6 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
     ]
   });
 
-  user.lastPack = Date.now();
-  saveUsers();
 });
 const rarityOrder = {
   Mythical: 0,
@@ -393,7 +431,7 @@ app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
   const grouped = {};
 
   for (const card of users[userId].cards) {
-    const key = `${card.id}-${card.variant}`;
+    const key = `${card.id}-${card.rarity}-${card.variant}`;
 
     if (!grouped[key]) {
       grouped[key] = {
