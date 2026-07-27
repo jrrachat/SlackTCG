@@ -590,7 +590,7 @@ app.command("/slacktcg-trade", async ({ command, ack, respond }) => {
 
   let text =
     `🤝 *Trade Complete!*\n\n` +
-    `You gave:\n` +
+    `<@${command.user_id}> gave:\n` +
     `🃏 *${tradedCard.name}*\n` +
     `${rarityIcons[tradedCard.rarity]} ${tradedCard.rarity}`;
 
