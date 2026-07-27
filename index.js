@@ -52,11 +52,13 @@ function getCardPrestige(card) {
     Normal: 0,
     "🟨 Gold": 1,
     "✨ Shiny": 2,
-    "🌈 Rainbow": 3
+    "🌈 Rainbow": 3,
+    "👑 God": 4
   };
 
   return (rarityRank[card.rarity] || 0) * 10 +
-    (variantRank[card.variant] || 0);
+    (variantRank[card.variant] || 0) +
+    (card.prismatic ? 5 : 0);
 }
 
 function recordPackStats(teamId, slackUserId, pack) {
@@ -443,10 +445,11 @@ View your collection
 View the workspace's pack, Mythical, and rarest-pull leaders
 
 /slacktcg-trade @user <card>
-Trade a member card by first and last name. Capitalization, spaces, and hyphens are optional. Add normal, gold, shiny, or rainbow to specify the modifier.
+Trade a member card by first and last name. Capitalization, spaces, and hyphens are optional. Add normal, gold, shiny, rainbow, god, or god-prismatic to specify the card.
 
 Card Rarities: Common 60%, Rare 25%, Epic 10%, Legendary 4%, Mythical 1%
-Modifier Rarities: Normal 96%, Gold 3%, Shiny 0.9%, Rainbow 0.1%`
+Modifier Rarities: Normal 96%, Gold 3%, Shiny 0.9%, Rainbow 0.1%
+God Pack: 5% per pack; Prismatic: 1% per God Pack card`
   });
 });
 
@@ -477,15 +480,31 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
   }));
 
 
-  function getRandomRarity() {
-    const totalWeight = rarityWeights.reduce(
+  function getRandomRarity(minimumRarity = "Common") {
+    const minimumRank = {
+      Common: 0,
+      Rare: 1,
+      Epic: 2,
+      Legendary: 3,
+      Mythical: 4
+    }[minimumRarity];
+    const eligibleWeights = rarityWeights.filter(
+      item => ({
+        Common: 0,
+        Rare: 1,
+        Epic: 2,
+        Legendary: 3,
+        Mythical: 4
+      })[item.rarity] >= minimumRank
+    );
+    const totalWeight = eligibleWeights.reduce(
       (total, item) => total + item.chance,
       0
     );
     const roll = Math.random() * totalWeight;
     let total = 0;
 
-    for (const item of rarityWeights) {
+    for (const item of eligibleWeights) {
       total += item.chance;
 
       if (roll < total) {
@@ -550,19 +569,24 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
     return;
   }
 
+  const godPack = Math.random() < 0.05;
+  const godPackMember = godPack
+    ? memberCards[Math.floor(Math.random() * memberCards.length)]
+    : null;
   const pack = [];
 
   for (let i = 0; i < 5; i++) {
 
-    const rarity = getRandomRarity();
-    const card = memberCards[
-      Math.floor(Math.random() * memberCards.length)
-    ];
+    const rarity = getRandomRarity(godPack ? "Rare" : "Common");
+    const card = godPack
+      ? godPackMember
+      : memberCards[Math.floor(Math.random() * memberCards.length)];
 
     pack.push({
       ...card,
       rarity,
-      variant: getVariant()
+      variant: godPack ? "👑 God" : getVariant(),
+      prismatic: godPack && Math.random() < 0.01
     });
   }
 
@@ -581,6 +605,10 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
 
       if (card.variant !== "Normal") {
         text += `\n✨ Modifier: ${card.variant}`;
+      }
+
+      if (card.prismatic) {
+        text += "\n🔮 Finish: *Prismatic*";
       }
 
       const cardBlock = {
@@ -609,7 +637,9 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
         type: "header",
         text: {
           type: "plain_text",
-          text: "🎴 SlackTCG Pack Opened!"
+          text: godPack
+            ? "⚡ GOD PACK ⚡"
+            : "🎴 SlackTCG Pack Opened!"
         }
       },
       ...(luckyHour
@@ -668,10 +698,11 @@ function findTradeCard(cards, cardArg) {
     normal: "Normal",
     gold: "🟨 Gold",
     shiny: "✨ Shiny",
-    rainbow: "🌈 Rainbow"
+    rainbow: "🌈 Rainbow",
+    god: "👑 God"
   };
   const explicitVariant = cardArg.match(
-    /^(.*?)[\s_-]+(normal|gold|shiny|rainbow)\s*$/i
+    /^(.*?)[\s_-]+(normal|gold|shiny|rainbow|god)(?:[\s_-]+(prismatic))?\s*$/i
   );
   let candidates;
 
@@ -680,7 +711,10 @@ function findTradeCard(cards, cardArg) {
     const requestedVariant = variants[explicitVariant[2].toLowerCase()];
     candidates = cards
       .map((card, index) => ({ card, index }))
-      .filter(({ card }) => card.variant === requestedVariant)
+      .filter(({ card }) =>
+        card.variant === requestedVariant &&
+        Boolean(card.prismatic) === Boolean(explicitVariant[3])
+      )
       .map(match => ({
         ...match,
         distance: getEditDistance(
@@ -697,11 +731,12 @@ function findTradeCard(cards, cardArg) {
         const modifier = card.variant === "Normal"
           ? ""
           : card.variant.replace(/^[^A-Za-z]+/, "");
+        const finish = card.prismatic ? "Prismatic" : "";
 
         return {
           ...match,
           distance: getEditDistance(
-            normalizeCardName(`${card.name}${modifier}`),
+            normalizeCardName(`${card.name}${modifier}${finish}`),
             requestedCard
           )
         };
@@ -715,7 +750,8 @@ function findTradeCard(cards, cardArg) {
   const uniqueMatches = new Map();
 
   for (const match of matches) {
-    const key = `${match.card.name.toLowerCase()}:${match.card.variant}`;
+    const key =
+      `${match.card.name.toLowerCase()}:${match.card.variant}:${Boolean(match.card.prismatic)}`;
     if (!uniqueMatches.has(key)) uniqueMatches.set(key, match);
   }
 
@@ -737,7 +773,8 @@ app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
   const grouped = {};
 
   for (const card of users[userId].cards) {
-    const key = `${card.id}-${card.rarity}-${card.variant}`;
+    const key =
+      `${card.id}-${card.rarity}-${card.variant}-${Boolean(card.prismatic)}`;
 
     if (!grouped[key]) {
       grouped[key] = {
@@ -772,6 +809,10 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
 
       if (card.variant !== "Normal") {
         text += `\n✨ Modifier: ${card.variant}`;
+      }
+
+      if (card.prismatic) {
+        text += "\n🔮 Finish: *Prismatic*";
       }
 
       return text;
@@ -862,6 +903,7 @@ app.command("/slacktcg-leaderboard", async ({ command, ack, respond }) => {
       `🃏 *${card.name}*\n` +
       `${rarityIcons[card.rarity]} *${card.rarity}*` +
       (card.variant !== "Normal" ? ` · ${card.variant}` : "") +
+      (card.prismatic ? " · 🔮 Prismatic" : "") +
       `\nPulled by <@${rarestPull.pulledBy}>`;
   }
 
@@ -959,7 +1001,7 @@ app.command("/slacktcg-trade", async ({ command, ack, respond, client }) => {
 
   if (matchingCards.length > 1) {
     await respond(
-      "❌ That card name is ambiguous. Add `-normal`, `-gold`, `-shiny`, or `-rainbow` to specify the exact card."
+      "❌ That card name is ambiguous. Add `-normal`, `-gold`, `-shiny`, `-rainbow`, `-god`, or `-god-prismatic` to specify the exact card."
     );
     return;
   }
@@ -981,6 +1023,10 @@ app.command("/slacktcg-trade", async ({ command, ack, respond, client }) => {
 
   if (tradedCard.variant !== "Normal") {
     text += `\n✨ Modifier: ${tradedCard.variant}`;
+  }
+
+  if (tradedCard.prismatic) {
+    text += "\n🔮 Finish: *Prismatic*";
   }
 
   text += `\n\nTo:\n<@${targetSlackId}>`;

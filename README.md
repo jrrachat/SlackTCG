@@ -13,6 +13,10 @@ Every hour has a 10% chance of Lucky Hour. The event is announced in `#gaming`,
 while non-Common rarity weights and Gold, Shiny, and Rainbow odds are tripled
 in every channel.
 
+Every pack has a 5% chance to become a **GOD PACK**. All five cards feature the
+same random channel member, are Rare or higher, and have the God modifier.
+God Packs are the only source of Prismatic cards, with a 1% chance per card.
+
 # How to use each command
 
 `/slacktcg-ping` — Check if the SlackTCG bot is online and view its latency.
@@ -29,8 +33,8 @@ and the rarest card ever pulled.
 `/slacktcg-trade @user <card>` — Trade one of your cards to another user.
 Capitalization, spaces, and hyphens are optional, so `Jane Doe-shiny`,
 `janedoe shiny`, and `JANE DOE SHINY` all work. Use `-normal`, `-gold`,
-`-shiny`, or `-rainbow` when a name could otherwise be ambiguous. A unique
-one-character typo is also accepted.
+`-shiny`, `-rainbow`, `-god`, or `-god-prismatic` when a name could otherwise
+be ambiguous. A unique one-character typo is also accepted.
 
 
 ![alt text](https://stardance.hackclub.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6MjA1MTM0LCJwdXIiOiJibG9iX2lkIn19--36ed88260394e82bd99a9ad94690a0affbe238c8/Screenshot%202026-07-25%20161904.png)
