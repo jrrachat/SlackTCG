@@ -9,6 +9,9 @@ Modifier Rarities: Normal 96%, Gold 3%, Shiny 0.9%, Rainbow 0.1%
 Each card is a non-bot member of the Slack channel where the pack is opened,
 using that member's first and last name.
 
+Every hour, `#gaming` has a 10% chance of Lucky Hour. During Lucky Hour,
+non-Common rarity weights and Gold, Shiny, and Rainbow odds are tripled.
+
 # How to use each command
 
 `/slacktcg-ping` — Check if the SlackTCG bot is online and view its latency.

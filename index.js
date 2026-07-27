@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const { App } = require("@slack/bolt");
 const { FileInstallationStore, InstallProvider } = require("@slack/oauth");
+const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
@@ -32,6 +33,18 @@ function getPackCooldown(user) {
   if (!user.lastPack) return 0;
 
   return Math.max(0, PACK_COOLDOWN - (Date.now() - user.lastPack));
+}
+
+function isLuckyHour(channelName, timestamp = Date.now()) {
+  if (channelName !== "gaming") return false;
+
+  const hour = new Date(timestamp).toISOString().slice(0, 13);
+  const digest = crypto
+    .createHmac("sha256", process.env.SLACK_STATE_SECRET)
+    .update(`lucky-hour:${hour}`)
+    .digest();
+
+  return digest.readUInt32BE(0) / 0x100000000 < 0.1;
 }
 
 const rarityIcons = {
@@ -352,20 +365,30 @@ Modifier Rarities: Normal 96%, Gold 3%, Shiny 0.9%, Rainbow 0.1%`
 app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
   await ack();
 
-  const rarityChances = [
+  const luckyHour = isLuckyHour(command.channel_name);
+  const rarityWeights = [
     { rarity: "Common", chance: 60 },
     { rarity: "Rare", chance: 25 },
     { rarity: "Epic", chance: 10 },
     { rarity: "Legendary", chance: 4 },
     { rarity: "Mythical", chance: 1 }
-  ];
+  ].map(item => ({
+    ...item,
+    chance: luckyHour && item.rarity !== "Common"
+      ? item.chance * 3
+      : item.chance
+  }));
 
 
   function getRandomRarity() {
-    const roll = Math.random() * 100;
+    const totalWeight = rarityWeights.reduce(
+      (total, item) => total + item.chance,
+      0
+    );
+    const roll = Math.random() * totalWeight;
     let total = 0;
 
-    for (const item of rarityChances) {
+    for (const item of rarityWeights) {
       total += item.chance;
 
       if (roll < total) {
@@ -377,16 +400,17 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
 
   function getVariant() {
     const roll = Math.random() * 100;
+    const multiplier = luckyHour ? 3 : 1;
 
-    if (roll < 0.1) {
+    if (roll < 0.1 * multiplier) {
       return "🌈 Rainbow";
     }
 
-    if (roll < 1) {
+    if (roll < 1 * multiplier) {
       return "✨ Shiny";
     }
 
-    if (roll < 4) {
+    if (roll < 4 * multiplier) {
       return "🟨 Gold";
     }
 
@@ -489,6 +513,15 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
           text: "🎴 SlackTCG Pack Opened!"
         }
       },
+      ...(luckyHour
+        ? [{
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: "🍀 *LUCKY HOUR!* Rare-card and special-modifier odds are tripled in #gaming."
+            }
+          }]
+        : []),
       ...packBlocks
     ]
   });
