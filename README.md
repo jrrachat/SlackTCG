@@ -31,7 +31,8 @@ the generation.
 
 `/slacktcg-help` — View a list of all available commands and learn how to use them.
 
-`/slacktcg-inventory` — View the five rarest unique cards in your collection.
+`/slacktcg-inventory [@user]` — View your or another player's five rarest
+unique cards.
 
 `/slacktcg-leaderboard` — View the top pack openers, top Mythical collectors,
 and the rarest card ever pulled.
@@ -44,8 +45,9 @@ luckiest tracked players.
 channel. Other members offer one card each, may replace their offer, and the
 rarest valid offer wins the auctioned card.
 
-`/slacktcg merge <rarity>` — Randomly consume 10 owned cards of one rarity and
-pull a new card of the next rarity. The member is selected from the current
+`/slacktcg merge <rarity>` — Randomly consume 10 owned cards of one rarity,
+excluding all copies represented among your five rarest unique cards, and pull
+a new card of the next rarity. The member is selected from the current
 channel and the modifier is rolled again. God and Prismatic remain exclusive
 to God Packs. Mythical cards cannot be merged upward.
 

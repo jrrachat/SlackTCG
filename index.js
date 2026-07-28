@@ -54,6 +54,13 @@ function saveStats() {
 }
 
 function getCardOddsProbability(card) {
+  if (
+    Number.isFinite(card.pullOddsProbability) &&
+    card.pullOddsProbability > 0
+  ) {
+    return card.pullOddsProbability;
+  }
+
   const normalRarityOdds = {
     Common: 0.6,
     Rare: 0.25,
@@ -91,28 +98,21 @@ function getCardOddsProbability(card) {
     (variantOdds[card.variant] || 0);
 }
 
-function getCardRarityScore(card) {
+function formatCardOdds(card) {
   const probability = getCardOddsProbability(card);
 
-  if (!probability) return null;
+  if (!probability) return "Unknown odds";
 
-  const memberProbability = 1 / (card.memberPoolSize || 1);
-  const mostCommonCardProbability =
-    memberProbability * 0.95 * 0.6 * 0.96;
+  const percentage = probability * 100;
+  const percentageText = percentage >= 0.01
+    ? percentage.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")
+    : percentage.toPrecision(3);
+  const oneIn = 1 / probability;
+  const oneInText = oneIn < 10
+    ? oneIn.toFixed(2)
+    : Math.round(oneIn).toLocaleString("en-US");
 
-  return mostCommonCardProbability / probability;
-}
-
-function formatCardOdds(card) {
-  const score = getCardRarityScore(card);
-
-  if (!score) return "Unknown";
-
-  const scoreText = score >= 100
-    ? Math.round(score).toLocaleString("en-US")
-    : score.toFixed(2).replace(/\.?0+$/, "");
-
-  return `${scoreText}`;
+  return `${percentageText}% (1 in ${oneInText})`;
 }
 
 function recordPackStats(teamId, slackUserId, pack) {
@@ -512,7 +512,7 @@ const customRoutes = [
       <div class="card">
         <p><strong>/slacktcg-help</strong> — View all commands.</p>
         <p><strong>/slacktcg-pack</strong> — Open your daily pack.</p>
-        <p><strong>/slacktcg-inventory</strong> — View your collection.</p>
+        <p><strong>/slacktcg-inventory [@user]</strong> — View your or another player's five rarest cards.</p>
         <p><strong>/slacktcg-trade @user card-name</strong> — Trade a card.</p>
         <p><strong>/slacktcg-ping</strong> — Check whether the app is online.</p>
       </div>
@@ -555,8 +555,8 @@ Check bot latency
 /slacktcg-pack
 Open your daily pack
 
-/slacktcg-inventory
-View your collection
+/slacktcg-inventory [@user]
+View your or another player's five rarest cards
 
 /slacktcg-leaderboard
 View the workspace's pack, Mythical, and rarest-pull leaders
@@ -754,7 +754,7 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
     const prismatic = godPack && Math.random() < 0.01;
     const rarityProbability = rarity === "BOYLED"
       ? 0.0001
-      : getRarityProbability(rarity, minimumRarity);
+      : 0.9999 * getRarityProbability(rarity, minimumRarity);
     const pullOddsProbability = godPack
       ? (1 / memberCards.length) *
         0.05 *
@@ -819,7 +819,7 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
         details += " · 🔮 Prismatic";
       }
 
-      details += `\nRarity Score: *${formatCardOdds(card)}*`;
+      details += `\nOdds: *${formatCardOdds(card)}*`;
 
       const cardBlock = {
         type: "section",
@@ -1045,14 +1045,63 @@ function findTradeCard(cards, cardArg) {
     .slice(0, 1);
 }
 
-app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
+function getCardCollectionKey(card) {
+  return `${card.id}-${card.rarity}-${card.variant}-${Boolean(card.prismatic)}-` +
+    `${card.generation || 1}-${getCardOddsProbability(card)}`;
+}
+
+function getFiveRarestCollectionKeys(cards) {
+  const uniqueCards = new Map();
+
+  for (const card of cards) {
+    const key = getCardCollectionKey(card);
+    if (!uniqueCards.has(key)) uniqueCards.set(key, card);
+  }
+
+  return new Set(
+    [...uniqueCards.entries()]
+      .sort(([, left], [, right]) => {
+        const oddsDifference =
+          getCardOddsProbability(left) - getCardOddsProbability(right);
+
+        if (oddsDifference !== 0) return oddsDifference;
+
+        const rarityDifference =
+          (rarityOrder[left.rarity] ?? 999) -
+          (rarityOrder[right.rarity] ?? 999);
+
+        if (rarityDifference !== 0) return rarityDifference;
+
+        return left.name.localeCompare(right.name);
+      })
+      .slice(0, 5)
+      .map(([key]) => key)
+  );
+}
+
+app.command("/slacktcg-inventory", async ({ command, ack, respond, client }) => {
   await ack();
 
-  const userId = `${command.team_id}:${command.user_id}`;
+  const targetArg = command.text.trim();
+  const targetSlackId = targetArg
+    ? await resolveSlackUserId(client, targetArg)
+    : command.user_id;
+
+  if (!targetSlackId) {
+    await respond(
+      "❌ I couldn't find that user. Select them from Slack's @mention autocomplete and try again."
+    );
+    return;
+  }
+
+  const userId = `${command.team_id}:${targetSlackId}`;
+  const viewingAnotherUser = targetSlackId !== command.user_id;
 
   if (!users[userId] || users[userId].cards.length === 0) {
     await respond({
-      text: "📦 Your inventory is empty!"
+      text: viewingAnotherUser
+        ? `📦 <@${targetSlackId}>'s inventory is empty!`
+        : "📦 Your inventory is empty!"
     });
     return;
   }
@@ -1060,9 +1109,7 @@ app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
   const grouped = {};
 
   for (const card of users[userId].cards) {
-    const key =
-      `${card.id}-${card.rarity}-${card.variant}-${Boolean(card.prismatic)}-` +
-      `${card.generation || 1}-${getCardOddsProbability(card)}`;
+    const key = getCardCollectionKey(card);
 
     if (!grouped[key]) {
       grouped[key] = {
@@ -1096,7 +1143,7 @@ app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
         `🃏 *${card.name}* x${card.count}
 ${rarityIcons[card.rarity]} *${card.rarity}*
 📅 *Gen ${card.generation || 1}*
-Rarity Score: *${formatCardOdds(card)}*`;
+Odds: *${formatCardOdds(card)}*`;
 
       if (card.variant !== "Normal") {
         text += `\n✨ Modifier: ${card.variant}`;
@@ -1161,7 +1208,9 @@ Rarity Score: *${formatCardOdds(card)}*`;
         type: "header",
         text: {
           type: "plain_text",
-          text: "🎒 Your 5 Rarest Cards"
+          text: viewingAnotherUser
+            ? "🎒 Player's 5 Rarest Cards"
+            : "🎒 Your 5 Rarest Cards"
         }
       },
       {
@@ -1170,6 +1219,7 @@ Rarity Score: *${formatCardOdds(card)}*`;
           {
             type: "mrkdwn",
             text:
+              (viewingAnotherUser ? `<@${targetSlackId}>\n` : "") +
               `Showing ${Math.min(5, groupedCards.length)} of ` +
               `${groupedCards.length} unique cards.\n${raritySummary}`
           }
@@ -1228,7 +1278,7 @@ app.command("/slacktcg-leaderboard", async ({ command, ack, respond }) => {
       (card.variant !== "Normal" ? ` · ${card.variant}` : "") +
       (card.prismatic ? " · 🔮 Prismatic" : "") +
       ` · 📅 Gen ${card.generation || 1}` +
-      `\nRarity Score: *${formatCardOdds(card)}*` +
+      `\nOdds: *${formatCardOdds(card)}*` +
       `\nPulled by <@${rarestPull.pulledBy}>`;
   }
 
@@ -1439,13 +1489,29 @@ async function handleMergeCommand({ command, ack, respond, client }) {
 
   const userId = `${command.team_id}:${command.user_id}`;
   const userCards = users[userId]?.cards || [];
+  const protectedCardKeys = getFiveRarestCollectionKeys(userCards);
   const eligibleCards = userCards
     .map((card, index) => ({ card, index }))
-    .filter(({ card }) => card.rarity === rarity);
+    .filter(({ card }) =>
+      card.rarity === rarity &&
+      !protectedCardKeys.has(getCardCollectionKey(card))
+    );
 
   if (eligibleCards.length < 10) {
+    const ownedAtRarity = userCards.filter(
+      card => card.rarity === rarity
+    ).length;
+    const protectedAtRarity = ownedAtRarity - eligibleCards.length;
+
     await respond(
-      `❌ You need 10 ${rarity} cards to merge. You have ${eligibleCards.length}.`
+      `❌ You need 10 unprotected ${rarity} cards to merge. You have ` +
+      `${eligibleCards.length} available` +
+      (
+        protectedAtRarity > 0
+          ? `; ${protectedAtRarity} are protected because they are among ` +
+            "your five rarest cards."
+          : "."
+      )
     );
     return;
   }
@@ -1535,7 +1601,7 @@ async function handleMergeCommand({ command, ack, respond, client }) {
   }
 
   resultText +=
-    `\nRarity Score: *${formatCardOdds(upgradedCard)}*`;
+    `\nOdds: *${formatCardOdds(upgradedCard)}*`;
 
   await respond(resultText);
   } catch (error) {
@@ -1568,7 +1634,7 @@ function formatAuctionCard(card) {
     text += " · 🔮 Prismatic";
   }
 
-  text += `\nRarity Score: *${formatCardOdds(card)}*`;
+  text += `\nOdds: *${formatCardOdds(card)}*`;
   return text;
 }
 
@@ -1702,7 +1768,7 @@ async function finishAuction(auctionId) {
     text:
       `🏆 *Auction Complete!*\n\n` +
       `<@${winningOffer.bidderSlackId}> won *${auctionedCard.name}* with ` +
-      `*${offeredCard.name}* (rarity score ${formatCardOdds(offeredCard)}).\n` +
+      `*${offeredCard.name}* (odds ${formatCardOdds(offeredCard)}).\n` +
       `<@${auction.sellerSlackId}> received the winning offer.`,
     blocks: []
   });
