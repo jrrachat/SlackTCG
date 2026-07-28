@@ -2178,13 +2178,19 @@ app.command("/slacktcg-trade", async ({ command, ack, respond, client }) => {
     targetId,
     targetSlackId,
     card: requestedCard,
+    channelId: command.channel_id,
     responseUrl: command.response_url,
     expiresAt: Date.now() + TRADE_EXPIRATION
   });
   setTimeout(() => pendingTrades.delete(tradeId), TRADE_EXPIRATION);
 
-  await respond({
-    response_type: "in_channel",
+  await respond(
+    `✅ Trade request sent privately to <@${targetSlackId}>.`
+  );
+
+  await client.chat.postEphemeral({
+    channel: command.channel_id,
+    user: targetSlackId,
     text: `<@${command.user_id}> wants to trade ${requestedCard.name} to <@${targetSlackId}>.`,
     blocks: [
       {
@@ -2261,7 +2267,7 @@ app.action("slacktcg_offer_trade_card", async ({
   }
 
   trade.channelId = body.channel.id;
-  trade.messageTs = body.message.ts;
+  trade.targetResponseUrl = body.response_url;
 
   await client.views.open({
     trigger_id: body.trigger_id,
@@ -2429,6 +2435,28 @@ app.view("slacktcg_trade_offer_modal", async ({
       `Slack trade message update failed with ${updateResponse.status}`
     );
   }
+
+  if (trade.targetResponseUrl) {
+    const targetUpdateResponse = await fetch(trade.targetResponseUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        replace_original: true,
+        text:
+          `✅ Your offer of *${offeredCard.name}* was sent privately to ` +
+          `<@${trade.senderSlackId}>.`,
+        blocks: []
+      })
+    });
+
+    if (!targetUpdateResponse.ok) {
+      throw new Error(
+        `Slack recipient trade update failed with ${targetUpdateResponse.status}`
+      );
+    }
+  }
 });
 
 app.action("slacktcg_confirm_trade", async ({
@@ -2491,6 +2519,24 @@ app.action("slacktcg_confirm_trade", async ({
     },
     body: JSON.stringify({
       replace_original: true,
+      text: "✅ Trade completed and announced in the channel.",
+      blocks: []
+    })
+  });
+
+  if (!confirmationResponse.ok) {
+    throw new Error(
+      `Slack trade confirmation failed with ${confirmationResponse.status}`
+    );
+  }
+
+  const publicConfirmationResponse = await fetch(trade.responseUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      replace_original: false,
       response_type: "in_channel",
       text:
         `🤝 *Trade Complete!*\n\n` +
@@ -2503,11 +2549,21 @@ app.action("slacktcg_confirm_trade", async ({
     })
   });
 
-  if (!confirmationResponse.ok) {
+  if (!publicConfirmationResponse.ok) {
     throw new Error(
-      `Slack trade confirmation failed with ${confirmationResponse.status}`
+      `Slack public trade announcement failed with ${publicConfirmationResponse.status}`
     );
   }
+
+  await client.chat.postEphemeral({
+    channel: trade.channelId,
+    user: trade.targetSlackId,
+    text:
+      `🤝 *Trade Complete!*\n\n` +
+      `You received *${senderCard.name}* (Gen ${senderCard.generation || 1}) ` +
+      `from <@${trade.senderSlackId}>.\n` +
+      `<@${trade.senderSlackId}> received *${targetCard.name}*.`
+  });
 });
 
 app.action("slacktcg_decline_trade", async ({
@@ -2542,10 +2598,38 @@ app.action("slacktcg_decline_trade", async ({
   pendingTrades.delete(action.value);
   await respond({
     replace_original: true,
-    text:
-      `❌ <@${body.user.id}> declined the trade between ` +
-      `<@${trade.senderSlackId}> and <@${trade.targetSlackId}>.`
+    text: "❌ Trade declined."
   });
+
+  const otherUserId = body.user.id === trade.senderSlackId
+    ? trade.targetSlackId
+    : trade.senderSlackId;
+
+  if (body.user.id === trade.targetSlackId) {
+    const senderUpdateResponse = await fetch(trade.responseUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        replace_original: true,
+        text: `❌ <@${trade.targetSlackId}> declined your trade request.`,
+        blocks: []
+      })
+    });
+
+    if (!senderUpdateResponse.ok) {
+      throw new Error(
+        `Slack sender decline update failed with ${senderUpdateResponse.status}`
+      );
+    }
+  } else {
+    await client.chat.postEphemeral({
+      channel: trade.channelId,
+      user: otherUserId,
+      text: `❌ <@${trade.senderSlackId}> declined the trade.`
+    });
+  }
 });
 
 
