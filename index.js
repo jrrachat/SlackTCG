@@ -1219,7 +1219,6 @@ app.command("/slacktcg-odds", async ({ command, ack, respond }) => {
     : "_No tracked players yet._";
 
   await respond({
-    response_type: "in_channel",
     blocks: [
       {
         type: "header",
