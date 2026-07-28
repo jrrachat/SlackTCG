@@ -774,7 +774,7 @@ ${rarityIcons[card.rarity]} *${card.rarity}*
         text += "\n🔮 Finish: *Prismatic*";
       }
 
-      text += `\n🎲 Exact card odds: *${formatCardOdds(card)}*`;
+      text += `\nOdds: *${formatCardOdds(card)}*`;
 
       const cardBlock = {
         type: "section",
@@ -990,7 +990,7 @@ app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
         `🃏 *${card.name}* x${card.count}
 ${rarityIcons[card.rarity]} *${card.rarity}*
 📅 *Gen ${card.generation || 1}*
-🎲 Exact card odds: *${formatCardOdds(card)}*`;
+Odds: *${formatCardOdds(card)}*`;
 
       if (card.variant !== "Normal") {
         text += `\n✨ Modifier: ${card.variant}`;
@@ -1117,7 +1117,7 @@ app.command("/slacktcg-leaderboard", async ({ command, ack, respond }) => {
       (card.variant !== "Normal" ? ` · ${card.variant}` : "") +
       (card.prismatic ? " · 🔮 Prismatic" : "") +
       ` · 📅 Gen ${card.generation || 1}` +
-      `\n🎲 Exact card odds: *${formatCardOdds(card)}*` +
+      `\nOdds: *${formatCardOdds(card)}*` +
       `\nPulled by <@${rarestPull.pulledBy}>`;
   }
 
@@ -1249,8 +1249,7 @@ app.command("/slacktcg-odds", async ({ command, ack, respond }) => {
           text:
             "*Special Event Odds*\n" +
             "⚡ God Pack: 5% per pack (1 in 20)\n" +
-            "🍀 Lucky Hour: 10% per hour (1 in 10)\n" +
-            "A God Pack guarantees five Rare-or-better cards. Lucky Hour triples non-Common weights and special-modifier odds."
+            "🍀 Lucky Hour: 10% per hour (1 in 10)"
         }
       },
       {
@@ -1272,8 +1271,7 @@ app.command("/slacktcg-odds", async ({ command, ack, respond }) => {
         elements: [
           {
             type: "mrkdwn",
-            text:
-              "100% luckiness means the player has exactly their statistically expected number of Rare+ pulls. Tracking begins after this update."
+            text: "100% luckiness = expected Rare+ results. New pulls only."
           }
         ]
       }
