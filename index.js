@@ -588,7 +588,7 @@ Open your daily pack
 View your or another player's five rarest cards
 
 /slacktcg-rarestof @user
-View another player's five rarest cards
+View the five rarest cards representing a person
 
 /slacktcg-leaderboard
 View the workspace's pack-opening leaders and rarest pull
@@ -1303,33 +1303,32 @@ app.command("/slacktcg-rarestof", async ({
     return;
   }
 
-  const cards = users[`${command.team_id}:${targetSlackId}`]?.cards || [];
+  const teamPrefix = `${command.team_id}:`;
+  const cards = Object.entries(users)
+    .filter(([userId]) => userId.startsWith(teamPrefix))
+    .flatMap(([userId, user]) =>
+      (user.cards || [])
+        .filter(card => card.memberId === targetSlackId)
+        .map(card => ({
+          ...card,
+          ownerSlackId: userId.slice(teamPrefix.length)
+        }))
+    );
 
   if (cards.length === 0) {
-    await respond(`📦 <@${targetSlackId}>'s inventory is empty!`);
+    await respond(
+      `📦 No cards representing <@${targetSlackId}> have been pulled yet.`
+    );
     return;
   }
 
-  const groupedCards = new Map();
-
-  for (const card of cards) {
-    const key = getCardCollectionKey(card);
-    const existing = groupedCards.get(key);
-
-    if (existing) {
-      existing.count++;
-    } else {
-      groupedCards.set(key, { ...card, count: 1 });
-    }
-  }
-
-  const rarestCards = [...groupedCards.values()]
+  const rarestCards = cards
     .sort((left, right) => {
       const oddsDifference =
         getCardOddsProbability(left) - getCardOddsProbability(right);
 
       if (oddsDifference !== 0) return oddsDifference;
-      return left.name.localeCompare(right.name);
+      return left.ownerSlackId.localeCompare(right.ownerSlackId);
     })
     .slice(0, 5);
 
@@ -1355,7 +1354,7 @@ app.command("/slacktcg-rarestof", async ({
           `${rarityIcons[card.rarity] || "🃏"} *${card.rarity}* · ` +
           `Gen ${card.generation || 1} · ` +
           `Odds: *${formatCardOdds(card)}* · ` +
-          `Owned: *${card.count}*`;
+          `Owned by <@${card.ownerSlackId}>`;
 
         if (card.variant !== "Normal") {
           details += ` · ${card.variant}`;
