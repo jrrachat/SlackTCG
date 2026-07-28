@@ -40,12 +40,20 @@ and the rarest card ever pulled.
 Rare-or-better pulls with the statistically expected total, and see the three
 luckiest tracked players.
 
+`/slacktcg-auction <card>` — Start a public five-minute auction in the current
+channel. Other members offer one card each, may replace their offer, and the
+rarest valid offer wins the auctioned card.
+
+`/slacktcg merge <rarity>` — Randomly consume 10 owned cards of one rarity and
+pull a new card of the next rarity. The member is selected from the current
+channel and the modifier is rolled again. God and Prismatic remain exclusive
+to God Packs. Mythical cards cannot be merged upward.
+
 `/slacktcg-trade @user <card>` — Trade one of your cards to another user.
-Capitalization, spaces, and hyphens are optional, so `Jane Doe-shiny`,
-`janedoe shiny`, and `JANE DOE SHINY` all work. Use `-normal`, `-gold`,
-`-shiny`, `-rainbow`, `-god`, or `-god-prismatic` when a name could otherwise
-be ambiguous, and add `-gen1`, `-gen2`, and so on when needed. For example:
-`Jane Doe-shiny-gen1`. A unique one-character typo is also accepted. The recipient
+Using only a name selects the rarest matching card. Add rarity, modifier,
+finish, and generation with hyphens in any order, such as
+`Jane Doe-mythical-prismatic-god-gen1`. A unique one-character typo is also
+accepted. The recipient
 offers one of their own cards, then the original sender accepts or declines the
 final swap.
 

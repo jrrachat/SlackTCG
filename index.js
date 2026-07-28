@@ -11,7 +11,9 @@ const usersPath = __dirname + "/data/users.json";
 const statsPath = __dirname + "/data/stats.json";
 const PACK_COOLDOWN = 30 * 1000;
 const TRADE_EXPIRATION = 10 * 60 * 1000;
+const AUCTION_DURATION = 5 * 60 * 1000;
 const pendingTrades = new Map();
+const activeAuctions = new Map();
 
 let users = JSON.parse(
   fs.readFileSync(usersPath, "utf8")
@@ -138,6 +140,8 @@ function refreshRarestPullsFromInventories() {
     const teamStats = stats.teams[teamId] ||= {};
 
     for (const card of user.cards || []) {
+      if (card.merged) continue;
+
       const probability = getCardOddsProbability(card);
 
       if (
@@ -534,8 +538,14 @@ View the workspace's pack, Mythical, and rarest-pull leaders
 /slacktcg-odds
 View pull odds, your luckiness, and the workspace's luckiest players
 
+/slacktcg-auction <card>
+Auction a card for five minutes; the rarest valid card offer wins
+
+/slacktcg merge <rarity>
+Merge 10 random cards into one card of the next rarity
+
 /slacktcg-trade @user <card>
-Trade a member card by first and last name. Capitalization, spaces, and hyphens are optional. Add the modifier and generation, such as shiny-gen1, to specify the card.
+Trade the rarest matching member card by default. Add rarity, modifier, finish, or generation with hyphens in any order to specify a card.
 
 Card Rarities: Common 60%, Rare 25%, Epic 10%, Legendary 4%, Mythical 1%
 Modifier Rarities: Normal 96%, Gold 3%, Shiny 0.9%, Rainbow 0.1%
@@ -876,77 +886,115 @@ function findTradeCard(cards, cardArg) {
     rainbow: "🌈 Rainbow",
     god: "👑 God"
   };
-  const generationMatch = cardArg.match(
-    /^(.*?)[\s_-]+gen(?:eration)?[\s_-]*(\d+)\s*$/i
-  );
-  const requestedGeneration = generationMatch
-    ? Number(generationMatch[2])
-    : null;
-  const tradeInput = generationMatch ? generationMatch[1] : cardArg;
-  const explicitVariant = tradeInput.match(
-    /^(.*?)[\s_-]+(normal|gold|shiny|rainbow|god)(?:[\s_-]+(prismatic))?\s*$/i
-  );
-  let candidates;
+  const rarities = {
+    common: "Common",
+    rare: "Rare",
+    epic: "Epic",
+    legendary: "Legendary",
+    mythical: "Mythical"
+  };
+  const requested = {
+    rarity: null,
+    variant: null,
+    prismatic: null,
+    generation: null
+  };
+  const applyDescriptor = token => {
+    const normalized = token.toLowerCase().replace(/\s+/g, "");
 
-  if (explicitVariant) {
-    const requestedName = normalizeCardName(explicitVariant[1]);
-    const requestedVariant = variants[explicitVariant[2].toLowerCase()];
-    candidates = cards
-      .map((card, index) => ({ card, index }))
-      .filter(({ card }) =>
-        card.variant === requestedVariant &&
-        Boolean(card.prismatic) === Boolean(explicitVariant[3]) &&
-        (
-          requestedGeneration === null ||
-          (card.generation || 1) === requestedGeneration
-        )
-      )
-      .map(match => ({
-        ...match,
-        distance: getEditDistance(
-          normalizeCardName(match.card.name),
-          requestedName
-        )
-      }));
-  } else {
-    const requestedCard = normalizeCardName(tradeInput);
-    candidates = cards
-      .map((card, index) => ({ card, index }))
-      .filter(({ card }) =>
-        requestedGeneration === null ||
-        (card.generation || 1) === requestedGeneration
-      )
-      .map(match => {
-        const card = match.card;
-        const modifier = card.variant === "Normal"
-          ? ""
-          : card.variant.replace(/^[^A-Za-z]+/, "");
-        const finish = card.prismatic ? "Prismatic" : "";
+    if (normalized in rarities) {
+      requested.rarity = rarities[normalized];
+      return true;
+    }
 
-        return {
-          ...match,
-          distance: getEditDistance(
-            normalizeCardName(`${card.name}${modifier}${finish}`),
-            requestedCard
-          )
-        };
-      });
+    if (normalized in variants) {
+      requested.variant = variants[normalized];
+      return true;
+    }
+
+    if (normalized === "prismatic") {
+      requested.prismatic = true;
+      return true;
+    }
+
+    if (normalized === "nonprismatic" || normalized === "standard") {
+      requested.prismatic = false;
+      return true;
+    }
+
+    const generation = normalized.match(/^gen(?:eration)?(\d+)$/);
+
+    if (generation) {
+      requested.generation = Number(generation[1]);
+      return true;
+    }
+
+    return false;
+  };
+  const nameParts = [];
+
+  for (const part of cardArg.split("-").map(value => value.trim()).filter(Boolean)) {
+    if (!applyDescriptor(part)) nameParts.push(part);
   }
 
-  const exactMatches = candidates.filter(match => match.distance === 0);
-  const matches = exactMatches.length > 0
-    ? exactMatches
-    : candidates.filter(match => match.distance === 1);
-  const uniqueMatches = new Map();
+  const trailingNameParts = nameParts.join("-").trim().split(/\s+/);
 
-  for (const match of matches) {
-    const key =
-      `${match.card.name.toLowerCase()}:${match.card.variant}:` +
-      `${Boolean(match.card.prismatic)}:${match.card.generation || 1}`;
-    if (!uniqueMatches.has(key)) uniqueMatches.set(key, match);
+  while (
+    trailingNameParts.length > 1 &&
+    applyDescriptor(trailingNameParts[trailingNameParts.length - 1])
+  ) {
+    trailingNameParts.pop();
   }
 
-  return [...uniqueMatches.values()];
+  let requestedName = normalizeCardName(trailingNameParts.join(" "));
+  let candidates = cards
+    .map((card, index) => ({
+      card,
+      index,
+      distance: getEditDistance(
+        normalizeCardName(card.name),
+        requestedName
+      )
+    }))
+    .filter(({ card }) =>
+      (requested.rarity === null || card.rarity === requested.rarity) &&
+      (requested.variant === null || card.variant === requested.variant) &&
+      (
+        requested.prismatic === null ||
+        Boolean(card.prismatic) === requested.prismatic
+      ) &&
+      (
+        requested.generation === null ||
+        (card.generation || 1) === requested.generation
+      )
+    );
+
+  if (candidates.length === 0 && nameParts.length !== cardArg.split("-").length) {
+    requestedName = normalizeCardName(cardArg);
+    candidates = cards.map((card, index) => ({
+      card,
+      index,
+      distance: getEditDistance(
+        normalizeCardName(card.name),
+        requestedName
+      )
+    }));
+  }
+
+  const closestDistance = Math.min(
+    ...candidates.map(candidate => candidate.distance),
+    Infinity
+  );
+
+  if (closestDistance > 1) return [];
+
+  return candidates
+    .filter(candidate => candidate.distance === closestDistance)
+    .sort((left, right) =>
+      getCardOddsProbability(left.card) -
+      getCardOddsProbability(right.card)
+    )
+    .slice(0, 1);
 }
 
 app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
@@ -1287,6 +1335,483 @@ app.command("/slacktcg-odds", async ({ command, ack, respond }) => {
       }
     ]
   });
+});
+
+app.command("/slacktcg", async ({ command, ack, respond, client }) => {
+  await ack();
+
+  const [subcommand, rarityArg, ...extraArgs] =
+    command.text.trim().split(/\s+/);
+
+  if (
+    subcommand?.toLowerCase() !== "merge" ||
+    !rarityArg ||
+    extraArgs.length > 0
+  ) {
+    await respond("❌ Usage: `/slacktcg merge <rarity>`");
+    return;
+  }
+
+  const rarityNames = {
+    common: "Common",
+    rare: "Rare",
+    epic: "Epic",
+    legendary: "Legendary",
+    mythical: "Mythical"
+  };
+  const nextRarity = {
+    Common: "Rare",
+    Rare: "Epic",
+    Epic: "Legendary",
+    Legendary: "Mythical"
+  };
+  const rarity = rarityNames[rarityArg.toLowerCase()];
+
+  if (!rarity) {
+    await respond(
+      "❌ Rarity must be Common, Rare, Epic, Legendary, or Mythical."
+    );
+    return;
+  }
+
+  if (rarity === "Mythical") {
+    await respond("❌ Mythical is already the highest rarity.");
+    return;
+  }
+
+  const userId = `${command.team_id}:${command.user_id}`;
+  const userCards = users[userId]?.cards || [];
+  const eligibleCards = userCards
+    .map((card, index) => ({ card, index }))
+    .filter(({ card }) => card.rarity === rarity);
+
+  if (eligibleCards.length < 10) {
+    await respond(
+      `❌ You need 10 ${rarity} cards to merge. You have ${eligibleCards.length}.`
+    );
+    return;
+  }
+
+  for (let index = eligibleCards.length - 1; index > 0; index--) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [eligibleCards[index], eligibleCards[randomIndex]] =
+      [eligibleCards[randomIndex], eligibleCards[index]];
+  }
+
+  let memberCards;
+
+  try {
+    memberCards = await getChannelMemberCards(client, command.channel_id);
+  } catch (error) {
+    console.error("Could not load channel members for merge", error);
+    await respond("❌ I couldn't load this channel's members.");
+    return;
+  }
+
+  if (memberCards.length === 0) {
+    await respond("❌ This channel has no eligible members to pull.");
+    return;
+  }
+
+  const consumedCards = eligibleCards.slice(0, 10);
+  const pulledMember = memberCards[
+    Math.floor(Math.random() * memberCards.length)
+  ];
+  const modifierRoll = Math.random() * 100;
+  let variant = "Normal";
+  let variantProbability = 0.96;
+
+  if (modifierRoll < 0.1) {
+    variant = "🌈 Rainbow";
+    variantProbability = 0.001;
+  } else if (modifierRoll < 1) {
+    variant = "✨ Shiny";
+    variantProbability = 0.009;
+  } else if (modifierRoll < 4) {
+    variant = "🟨 Gold";
+    variantProbability = 0.03;
+  }
+
+  const upgradedCard = {
+    ...pulledMember,
+    rarity: nextRarity[rarity],
+    variant,
+    prismatic: false,
+    generation: getCurrentGeneration(),
+    memberPoolSize: memberCards.length,
+    pullOddsProbability:
+      (1 / memberCards.length) * variantProbability,
+    merged: true,
+    mergedFrom: rarity
+  };
+
+  const consumedIndexes = consumedCards
+    .map(({ index }) => index)
+    .sort((left, right) => right - left);
+
+  for (const index of consumedIndexes) {
+    userCards.splice(index, 1);
+  }
+
+  userCards.push(upgradedCard);
+  recordPackStats(command.team_id, command.user_id, [upgradedCard]);
+  saveUsers();
+
+  let resultText =
+    `🔮 *Merge Complete!*\n\n` +
+    `10 ${rarity} cards → 1 ${upgradedCard.rarity} card\n\n` +
+    `🃏 *${upgradedCard.name}*\n` +
+    `${rarityIcons[upgradedCard.rarity]} ${upgradedCard.rarity} · ` +
+    `Gen ${upgradedCard.generation || 1}`;
+
+  if (upgradedCard.variant !== "Normal") {
+    resultText += ` · ${upgradedCard.variant}`;
+  }
+
+  if (upgradedCard.prismatic) {
+    resultText += " · 🔮 Prismatic";
+  }
+
+  await respond(resultText);
+});
+
+function formatAuctionCard(card) {
+  let text =
+    `🃏 *${card.name}*\n` +
+    `${rarityIcons[card.rarity]} ${card.rarity} · ` +
+    `Gen ${card.generation || 1}`;
+
+  if (card.variant !== "Normal") {
+    text += ` · ${card.variant}`;
+  }
+
+  if (card.prismatic) {
+    text += " · 🔮 Prismatic";
+  }
+
+  text += `\nOdds: *${formatCardOdds(card)}*`;
+  return text;
+}
+
+async function updateAuctionMessage(auction, payload) {
+  const response = await fetch(auction.responseUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      replace_original: true,
+      response_type: "in_channel",
+      ...payload
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Slack auction update failed with ${response.status}`);
+  }
+}
+
+function getValidAuctionOffers(auction) {
+  return [...auction.offers.values()]
+    .filter(offer =>
+      users[offer.bidderId]?.cards.includes(offer.card)
+    )
+    .sort((left, right) => {
+      const oddsDifference =
+        getCardOddsProbability(left.card) -
+        getCardOddsProbability(right.card);
+
+      return oddsDifference || left.offeredAt - right.offeredAt;
+    });
+}
+
+async function renderAuction(auction) {
+  const bestOffer = getValidAuctionOffers(auction)[0];
+  const secondsRemaining = Math.max(
+    0,
+    Math.ceil((auction.expiresAt - Date.now()) / 1000)
+  );
+  const bestOfferText = bestOffer
+    ? `\n\n*Current winning offer from <@${bestOffer.bidderSlackId}>:*\n` +
+      formatAuctionCard(bestOffer.card)
+    : "\n\n_No offers yet._";
+
+  await updateAuctionMessage(auction, {
+    text: `<@${auction.sellerSlackId}> is auctioning ${auction.card.name}.`,
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            `🔨 *SlackTCG Auction*\n\n` +
+            `<@${auction.sellerSlackId}> is auctioning:\n` +
+            `${formatAuctionCard(auction.card)}` +
+            bestOfferText +
+            `\n\n_${secondsRemaining}s remaining · rarest valid offer wins_`
+        }
+      },
+      {
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            action_id: "slacktcg_auction_offer",
+            text: {
+              type: "plain_text",
+              text: "Offer a Card"
+            },
+            style: "primary",
+            value: auction.id
+          }
+        ]
+      }
+    ]
+  });
+}
+
+async function finishAuction(auctionId) {
+  const auction = activeAuctions.get(auctionId);
+
+  if (!auction) return;
+
+  activeAuctions.delete(auctionId);
+  activeAuctions.delete(auction.channelId);
+  const sellerCardIndex =
+    users[auction.sellerId]?.cards.indexOf(auction.card) ?? -1;
+
+  if (sellerCardIndex === -1) {
+    await updateAuctionMessage(auction, {
+      text: "❌ Auction cancelled: the seller no longer owns the listed card."
+    });
+    return;
+  }
+
+  const winningOffer = getValidAuctionOffers(auction)[0];
+
+  if (!winningOffer) {
+    await updateAuctionMessage(auction, {
+      text:
+        `⌛ *Auction Ended*\n\nNo valid offers were made for ` +
+        `*${auction.card.name}*.`
+    });
+    return;
+  }
+
+  const bidderCardIndex =
+    users[winningOffer.bidderId].cards.indexOf(winningOffer.card);
+
+  if (bidderCardIndex === -1) {
+    await updateAuctionMessage(auction, {
+      text: "❌ Auction ended without a valid winning offer."
+    });
+    return;
+  }
+
+  const auctionedCard =
+    users[auction.sellerId].cards.splice(sellerCardIndex, 1)[0];
+  const offeredCard =
+    users[winningOffer.bidderId].cards.splice(bidderCardIndex, 1)[0];
+  users[auction.sellerId].cards.push(offeredCard);
+  users[winningOffer.bidderId].cards.push(auctionedCard);
+  saveUsers();
+
+  await updateAuctionMessage(auction, {
+    text:
+      `🏆 *Auction Complete!*\n\n` +
+      `<@${winningOffer.bidderSlackId}> won *${auctionedCard.name}* with ` +
+      `*${offeredCard.name}* (${formatCardOdds(offeredCard)}).\n` +
+      `<@${auction.sellerSlackId}> received the winning offer.`
+  });
+}
+
+app.command("/slacktcg-auction", async ({ command, ack, respond }) => {
+  await ack();
+
+  const cardArg = command.text.trim();
+  const sellerId = `${command.team_id}:${command.user_id}`;
+
+  if (!cardArg) {
+    await respond("❌ Usage: `/slacktcg-auction <card>`");
+    return;
+  }
+
+  if (activeAuctions.has(command.channel_id)) {
+    await respond("❌ This channel already has an active auction.");
+    return;
+  }
+
+  const matchingCards = findTradeCard(
+    users[sellerId]?.cards || [],
+    cardArg
+  );
+
+  if (matchingCards.length === 0) {
+    await respond(`❌ You don't own a card matching "${cardArg}".`);
+    return;
+  }
+
+  const auctionCard = matchingCards[0].card;
+  const cardAlreadyAuctioned = [...new Set(activeAuctions.values())]
+    .some(activeAuction => activeAuction.card === auctionCard);
+
+  if (cardAlreadyAuctioned) {
+    await respond("❌ That card is already in another active auction.");
+    return;
+  }
+
+  const auctionId = crypto.randomUUID();
+  const auction = {
+    id: auctionId,
+    channelId: command.channel_id,
+    teamId: command.team_id,
+    sellerId,
+    sellerSlackId: command.user_id,
+    card: auctionCard,
+    responseUrl: command.response_url,
+    offers: new Map(),
+    expiresAt: Date.now() + AUCTION_DURATION
+  };
+
+  activeAuctions.set(command.channel_id, auction);
+  activeAuctions.set(auctionId, auction);
+
+  await respond({
+    response_type: "in_channel",
+    text: `<@${command.user_id}> started an auction for ${auction.card.name}.`
+  });
+  await renderAuction(auction);
+
+  setTimeout(() => {
+    finishAuction(auctionId).catch(error => {
+      console.error("Could not finish auction", error);
+    });
+  }, AUCTION_DURATION);
+});
+
+app.action("slacktcg_auction_offer", async ({
+  ack,
+  body,
+  action,
+  client
+}) => {
+  await ack();
+
+  const auction = activeAuctions.get(action.value);
+
+  if (!auction || Date.now() >= auction.expiresAt) {
+    await client.chat.postEphemeral({
+      channel: body.channel.id,
+      user: body.user.id,
+      text: "⌛ This auction has ended."
+    });
+    return;
+  }
+
+  if (body.user.id === auction.sellerSlackId) {
+    await client.chat.postEphemeral({
+      channel: body.channel.id,
+      user: body.user.id,
+      text: "❌ You can't bid on your own auction."
+    });
+    return;
+  }
+
+  await client.views.open({
+    trigger_id: body.trigger_id,
+    view: {
+      type: "modal",
+      callback_id: "slacktcg_auction_offer_modal",
+      private_metadata: auction.id,
+      title: {
+        type: "plain_text",
+        text: "Auction Offer"
+      },
+      submit: {
+        type: "plain_text",
+        text: "Submit Offer"
+      },
+      close: {
+        type: "plain_text",
+        text: "Cancel"
+      },
+      blocks: [
+        {
+          type: "input",
+          block_id: "card_input",
+          label: {
+            type: "plain_text",
+            text: "Card to offer"
+          },
+          element: {
+            type: "plain_text_input",
+            action_id: "card_name",
+            placeholder: {
+              type: "plain_text",
+              text: "Example: Jane Doe-mythical-shiny-gen1"
+            }
+          }
+        }
+      ]
+    }
+  });
+});
+
+app.view("slacktcg_auction_offer_modal", async ({
+  ack,
+  body,
+  view
+}) => {
+  const auction = activeAuctions.get(view.private_metadata);
+  const cardArg =
+    view.state.values.card_input.card_name.value.trim();
+
+  if (!auction || Date.now() >= auction.expiresAt) {
+    await ack({
+      response_action: "errors",
+      errors: {
+        card_input: "This auction has ended."
+      }
+    });
+    return;
+  }
+
+  const bidderId = `${auction.teamId}:${body.user.id}`;
+  const matchingCards = findTradeCard(
+    users[bidderId]?.cards || [],
+    cardArg
+  );
+
+  if (matchingCards.length === 0) {
+    await ack({
+      response_action: "errors",
+      errors: {
+        card_input: `You don't own a card matching "${cardArg}".`
+      }
+    });
+    return;
+  }
+
+  const offeredCard = matchingCards[0].card;
+
+  if (offeredCard === auction.card) {
+    await ack({
+      response_action: "errors",
+      errors: {
+        card_input: "You cannot offer the auctioned card."
+      }
+    });
+    return;
+  }
+
+  auction.offers.set(body.user.id, {
+    bidderId,
+    bidderSlackId: body.user.id,
+    card: offeredCard,
+    offeredAt: Date.now()
+  });
+  await ack();
+  await renderAuction(auction);
 });
 
 app.command("/slacktcg-trade", async ({ command, ack, respond, client }) => {
