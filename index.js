@@ -1340,6 +1340,7 @@ app.command("/slacktcg-odds", async ({ command, ack, respond }) => {
 app.command("/slacktcg", async ({ command, ack, respond, client }) => {
   await ack();
 
+  try {
   const [subcommand, rarityArg, ...extraArgs] =
     command.text.trim().split(/\s+/);
 
@@ -1473,6 +1474,17 @@ app.command("/slacktcg", async ({ command, ack, respond, client }) => {
   }
 
   await respond(resultText);
+  } catch (error) {
+    console.error("Could not merge cards", error);
+
+    try {
+      await respond(
+        "❌ Merge failed. Check the server log for `Could not merge cards`."
+      );
+    } catch (responseError) {
+      console.error("Could not send merge error response", responseError);
+    }
+  }
 });
 
 function formatAuctionCard(card) {
@@ -1582,7 +1594,8 @@ async function finishAuction(auctionId) {
 
   if (sellerCardIndex === -1) {
     await updateAuctionMessage(auction, {
-      text: "❌ Auction cancelled: the seller no longer owns the listed card."
+      text: "❌ Auction cancelled: the seller no longer owns the listed card.",
+      blocks: []
     });
     return;
   }
@@ -1593,7 +1606,8 @@ async function finishAuction(auctionId) {
     await updateAuctionMessage(auction, {
       text:
         `⌛ *Auction Ended*\n\nNo valid offers were made for ` +
-        `*${auction.card.name}*.`
+        `*${auction.card.name}*.`,
+      blocks: []
     });
     return;
   }
@@ -1603,7 +1617,8 @@ async function finishAuction(auctionId) {
 
   if (bidderCardIndex === -1) {
     await updateAuctionMessage(auction, {
-      text: "❌ Auction ended without a valid winning offer."
+      text: "❌ Auction ended without a valid winning offer.",
+      blocks: []
     });
     return;
   }
@@ -1621,7 +1636,8 @@ async function finishAuction(auctionId) {
       `🏆 *Auction Complete!*\n\n` +
       `<@${winningOffer.bidderSlackId}> won *${auctionedCard.name}* with ` +
       `*${offeredCard.name}* (${formatCardOdds(offeredCard)}).\n` +
-      `<@${auction.sellerSlackId}> received the winning offer.`
+      `<@${auction.sellerSlackId}> received the winning offer.`,
+    blocks: []
   });
 }
 
