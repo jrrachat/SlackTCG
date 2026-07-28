@@ -1141,10 +1141,12 @@ app.command("/slacktcg-inventory", async ({ command, ack, respond, client }) => 
   const viewingAnotherUser = targetSlackId !== command.user_id;
 
   if (!users[userId] || users[userId].cards.length === 0) {
+    const packsOpened = users[userId]?.packsOpened || 0;
+
     await respond({
       text: viewingAnotherUser
-        ? `📦 <@${targetSlackId}>'s inventory is empty!`
-        : "📦 Your inventory is empty!"
+        ? `📦 <@${targetSlackId}>'s inventory is empty!\nPacks opened: *${packsOpened}*`
+        : `📦 Your inventory is empty!\nPacks opened: *${packsOpened}*`
     });
     return;
   }
@@ -1263,6 +1265,7 @@ Odds: *${formatCardOdds(card)}*`;
             type: "mrkdwn",
             text:
               (viewingAnotherUser ? `<@${targetSlackId}>\n` : "") +
+              `Packs opened: *${users[userId].packsOpened || 0}*\n` +
               `Showing ${Math.min(5, groupedCards.length)} of ` +
               `${groupedCards.length} unique cards.\n${raritySummary}`
           }
