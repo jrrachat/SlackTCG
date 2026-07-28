@@ -12,8 +12,10 @@ const statsPath = __dirname + "/data/stats.json";
 const PACK_COOLDOWN = 30 * 1000;
 const TRADE_EXPIRATION = 10 * 60 * 1000;
 const AUCTION_DURATION = 60 * 1000;
+const MEMBER_CARD_CACHE_DURATION = 5 * 60 * 1000;
 const pendingTrades = new Map();
 const activeAuctions = new Map();
+const memberCardCache = new Map();
 
 let users = JSON.parse(
   fs.readFileSync(usersPath, "utf8")
@@ -107,6 +109,8 @@ function formatCardOdds(card) {
 }
 
 function recordPackStats(teamId, slackUserId, pack) {
+  stats ||= {};
+  stats.teams ||= {};
   const teamStats = stats.teams[teamId] ||= {};
 
   for (const card of pack) {
@@ -255,7 +259,14 @@ if (removedLegacyCards) {
   saveUsers();
 }
 
-async function getChannelMemberCards(client, channelId) {
+async function getChannelMemberCards(client, channelId, teamId = "") {
+  const cacheKey = `${teamId}:${channelId}`;
+  const cached = memberCardCache.get(cacheKey);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.cards;
+  }
+
   const memberIds = [];
   let cursor;
 
@@ -284,7 +295,7 @@ async function getChannelMemberCards(client, channelId) {
     cursor = response.response_metadata?.next_cursor || undefined;
   } while (cursor);
 
-  return members
+  const cards = members
     .filter(member =>
       member &&
       channelMemberIds.has(member.id) &&
@@ -307,6 +318,13 @@ async function getChannelMemberCards(client, channelId) {
       };
     })
     .filter(card => card.name);
+
+  memberCardCache.set(cacheKey, {
+    cards,
+    expiresAt: Date.now() + MEMBER_CARD_CACHE_DURATION
+  });
+
+  return cards;
 }
 
 async function resolveSlackUserId(client, target) {
@@ -557,6 +575,7 @@ God Pack: 5% per pack; Prismatic: 1% per God Pack card`
 app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
   await ack();
 
+  try {
   const luckyHour = isLuckyHour();
 
   if (luckyHour) {
@@ -677,6 +696,7 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
   }
 
   const user = users[userId];
+  user.cards = Array.isArray(user.cards) ? user.cards : [];
   const cooldown = getPackCooldown(user);
 
   if (cooldown > 0) {
@@ -689,7 +709,11 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
   let memberCards;
 
   try {
-    memberCards = await getChannelMemberCards(client, command.channel_id);
+    memberCards = await getChannelMemberCards(
+      client,
+      command.channel_id,
+      command.team_id
+    );
   } catch (error) {
     console.error("Could not load channel members", error);
     await respond(
@@ -839,7 +863,17 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
       ...packBlocks
     ]
   });
+  } catch (error) {
+    console.error("Could not open pack", error);
 
+    try {
+      await respond(
+        "❌ Pack failed. Check the server log for `Could not open pack`."
+      );
+    } catch (responseError) {
+      console.error("Could not send pack error response", responseError);
+    }
+  }
 });
 const rarityOrder = {
   Mythical: 0,
@@ -1406,7 +1440,11 @@ async function handleMergeCommand({ command, ack, respond, client }) {
   let memberCards;
 
   try {
-    memberCards = await getChannelMemberCards(client, command.channel_id);
+    memberCards = await getChannelMemberCards(
+      client,
+      command.channel_id,
+      command.team_id
+    );
   } catch (error) {
     console.error("Could not load channel members for merge", error);
     await respond("❌ I couldn't load this channel's members.");
