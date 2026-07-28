@@ -11,7 +11,7 @@ const usersPath = __dirname + "/data/users.json";
 const statsPath = __dirname + "/data/stats.json";
 const PACK_COOLDOWN = 30 * 1000;
 const TRADE_EXPIRATION = 10 * 60 * 1000;
-const AUCTION_DURATION = 5 * 60 * 1000;
+const AUCTION_DURATION = 60 * 1000;
 const pendingTrades = new Map();
 const activeAuctions = new Map();
 
