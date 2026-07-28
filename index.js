@@ -54,20 +54,20 @@ function saveStats() {
 }
 
 function getCardOddsProbability(card) {
-  if (card.pullOddsProbability) return card.pullOddsProbability;
-
   const normalRarityOdds = {
     Common: 0.6,
     Rare: 0.25,
     Epic: 0.1,
     Legendary: 0.04,
-    Mythical: 0.01
+    Mythical: 0.01,
+    BOYLED: 0.0001
   };
   const godPackRarityOdds = {
     Rare: 0.625,
     Epic: 0.25,
     Legendary: 0.1,
-    Mythical: 0.025
+    Mythical: 0.025,
+    BOYLED: 0.0001
   };
   const variantOdds = {
     Normal: 0.96,
@@ -91,21 +91,28 @@ function getCardOddsProbability(card) {
     (variantOdds[card.variant] || 0);
 }
 
-function formatCardOdds(card) {
+function getCardRarityScore(card) {
   const probability = getCardOddsProbability(card);
 
-  if (!probability) return "Unknown odds";
+  if (!probability) return null;
 
-  const percentage = probability * 100;
-  const percentageText = percentage >= 0.01
-    ? percentage.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")
-    : percentage.toPrecision(3);
-  const oneIn = 1 / probability;
-  const oneInText = oneIn < 10
-    ? oneIn.toFixed(2)
-    : Math.round(oneIn).toLocaleString("en-US");
+  const memberProbability = 1 / (card.memberPoolSize || 1);
+  const mostCommonCardProbability =
+    memberProbability * 0.95 * 0.6 * 0.96;
 
-  return `${percentageText}% (1 in ${oneInText})`;
+  return mostCommonCardProbability / probability;
+}
+
+function formatCardOdds(card) {
+  const score = getCardRarityScore(card);
+
+  if (!score) return "Unknown";
+
+  const scoreText = score >= 100
+    ? Math.round(score).toLocaleString("en-US")
+    : score.toFixed(2).replace(/\.?0+$/, "");
+
+  return `${scoreText}`;
 }
 
 function recordPackStats(teamId, slackUserId, pack) {
@@ -230,6 +237,7 @@ async function announceLuckyHour(client, teamId) {
 }
 
 const rarityIcons = {
+  BOYLED: "🥚",
   Common: "⚪",
   Rare: "🔵",
   Epic: "🟣",
@@ -557,7 +565,7 @@ View the workspace's pack, Mythical, and rarest-pull leaders
 View pull odds, your luckiness, and the workspace's luckiest players
 
 /slacktcg-auction <card>
-Auction a card for five minutes; the rarest valid card offer wins
+Auction a card for one minute; the rarest valid card offer wins
 
 /slacktcg merge <rarity>
 Merge 10 random cards into one card of the next rarity
@@ -736,13 +744,17 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
   for (let i = 0; i < 5; i++) {
 
     const minimumRarity = godPack ? "Rare" : "Common";
-    const rarity = getRandomRarity(minimumRarity);
+    const rarity = Math.random() < 0.0001
+      ? "BOYLED"
+      : getRandomRarity(minimumRarity);
     const card = godPack
       ? godPackMember
       : memberCards[Math.floor(Math.random() * memberCards.length)];
     const variant = godPack ? "👑 God" : getVariant();
     const prismatic = godPack && Math.random() < 0.01;
-    const rarityProbability = getRarityProbability(rarity, minimumRarity);
+    const rarityProbability = rarity === "BOYLED"
+      ? 0.0001
+      : getRarityProbability(rarity, minimumRarity);
     const pullOddsProbability = godPack
       ? (1 / memberCards.length) *
         0.05 *
@@ -807,7 +819,7 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
         details += " · 🔮 Prismatic";
       }
 
-      details += `\nOdds: *${formatCardOdds(card)}*`;
+      details += `\nRarity Score: *${formatCardOdds(card)}*`;
 
       const cardBlock = {
         type: "section",
@@ -876,6 +888,7 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
   }
 });
 const rarityOrder = {
+  BOYLED: -1,
   Mythical: 0,
   Legendary: 1,
   Epic: 2,
@@ -921,6 +934,7 @@ function findTradeCard(cards, cardArg) {
     god: "👑 God"
   };
   const rarities = {
+    boyled: "BOYLED",
     common: "Common",
     rare: "Rare",
     epic: "Epic",
@@ -1082,7 +1096,7 @@ app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
         `🃏 *${card.name}* x${card.count}
 ${rarityIcons[card.rarity]} *${card.rarity}*
 📅 *Gen ${card.generation || 1}*
-Odds: *${formatCardOdds(card)}*`;
+Rarity Score: *${formatCardOdds(card)}*`;
 
       if (card.variant !== "Normal") {
         text += `\n✨ Modifier: ${card.variant}`;
@@ -1123,6 +1137,11 @@ Odds: *${formatCardOdds(card)}*`;
   };
 
   for (const card of users[userId].cards) {
+    if (card.rarity === "BOYLED") {
+      rarityTotals.BOYLED = (rarityTotals.BOYLED || 0) + 1;
+      continue;
+    }
+
     if (card.rarity in rarityTotals) {
       rarityTotals[card.rarity]++;
     }
@@ -1209,7 +1228,7 @@ app.command("/slacktcg-leaderboard", async ({ command, ack, respond }) => {
       (card.variant !== "Normal" ? ` · ${card.variant}` : "") +
       (card.prismatic ? " · 🔮 Prismatic" : "") +
       ` · 📅 Gen ${card.generation || 1}` +
-      `\nOdds: *${formatCardOdds(card)}*` +
+      `\nRarity Score: *${formatCardOdds(card)}*` +
       `\nPulled by <@${rarestPull.pulledBy}>`;
   }
 
@@ -1515,6 +1534,9 @@ async function handleMergeCommand({ command, ack, respond, client }) {
     resultText += " · 🔮 Prismatic";
   }
 
+  resultText +=
+    `\nRarity Score: *${formatCardOdds(upgradedCard)}*`;
+
   await respond(resultText);
   } catch (error) {
     console.error("Could not merge cards", error);
@@ -1546,7 +1568,7 @@ function formatAuctionCard(card) {
     text += " · 🔮 Prismatic";
   }
 
-  text += `\nOdds: *${formatCardOdds(card)}*`;
+  text += `\nRarity Score: *${formatCardOdds(card)}*`;
   return text;
 }
 
@@ -1680,7 +1702,7 @@ async function finishAuction(auctionId) {
     text:
       `🏆 *Auction Complete!*\n\n` +
       `<@${winningOffer.bidderSlackId}> won *${auctionedCard.name}* with ` +
-      `*${offeredCard.name}* (${formatCardOdds(offeredCard)}).\n` +
+      `*${offeredCard.name}* (rarity score ${formatCardOdds(offeredCard)}).\n` +
       `<@${auction.sellerSlackId}> received the winning offer.`,
     blocks: []
   });
