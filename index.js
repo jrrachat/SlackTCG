@@ -1360,6 +1360,7 @@ app.command("/slacktcg-trade", async ({ command, ack, respond, client }) => {
     targetId,
     targetSlackId,
     card: requestedCard,
+    responseUrl: command.response_url,
     expiresAt: Date.now() + TRADE_EXPIRATION
   });
   setTimeout(() => pendingTrades.delete(tradeId), TRADE_EXPIRATION);
@@ -1551,13 +1552,17 @@ app.view("slacktcg_trade_offer_modal", async ({
     offeredCardText += "\n🔮 Finish: *Prismatic*";
   }
 
-  await client.chat.update({
-    channel: trade.channelId,
-    ts: trade.messageTs,
-    text:
-      `<@${trade.targetSlackId}> offered ${offeredCard.name} to ` +
-      `<@${trade.senderSlackId}>.`,
-    blocks: [
+  const updateResponse = await fetch(trade.responseUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      replace_original: true,
+      text:
+        `<@${trade.targetSlackId}> offered ${offeredCard.name} to ` +
+        `<@${trade.senderSlackId}>.`,
+      blocks: [
       {
         type: "section",
         text: {
@@ -1597,8 +1602,15 @@ app.view("slacktcg_trade_offer_modal", async ({
           }
         ]
       }
-    ]
+      ]
+    })
   });
+
+  if (!updateResponse.ok) {
+    throw new Error(
+      `Slack trade message update failed with ${updateResponse.status}`
+    );
+  }
 });
 
 app.action("slacktcg_confirm_trade", async ({
