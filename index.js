@@ -984,7 +984,7 @@ app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
 
       return a.name.localeCompare(b.name);
     })
-    .slice(0, 15)
+    .slice(0, 5)
     .map(card => {
       let text =
         `🃏 *${card.name}* x${card.count}
@@ -1050,7 +1050,7 @@ Odds: *${formatCardOdds(card)}*`;
         type: "header",
         text: {
           type: "plain_text",
-          text: "🎒 Your 15 Rarest Cards"
+          text: "🎒 Your 5 Rarest Cards"
         }
       },
       {
@@ -1059,7 +1059,7 @@ Odds: *${formatCardOdds(card)}*`;
           {
             type: "mrkdwn",
             text:
-              `Showing ${Math.min(15, groupedCards.length)} of ` +
+              `Showing ${Math.min(5, groupedCards.length)} of ` +
               `${groupedCards.length} unique cards.\n${raritySummary}`
           }
         ]

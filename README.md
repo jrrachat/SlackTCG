@@ -31,7 +31,7 @@ the generation.
 
 `/slacktcg-help` — View a list of all available commands and learn how to use them.
 
-`/slacktcg-inventory` — View the 15 rarest unique cards in your collection.
+`/slacktcg-inventory` — View the five rarest unique cards in your collection.
 
 `/slacktcg-leaderboard` — View the top pack openers, top Mythical collectors,
 and the rarest card ever pulled.
