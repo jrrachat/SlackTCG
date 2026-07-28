@@ -807,7 +807,6 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
 
 
   await respond({
-    response_type: "in_channel",
     blocks: [
       {
         type: "header",
