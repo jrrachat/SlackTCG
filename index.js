@@ -9,7 +9,9 @@ const path = require("path");
 
 const usersPath = __dirname + "/data/users.json";
 const statsPath = __dirname + "/data/stats.json";
-const PACK_COOLDOWN = 60 * 1000;
+const PACK_COOLDOWN = 30 * 1000;
+const TRADE_EXPIRATION = 10 * 60 * 1000;
+const pendingTrades = new Map();
 
 let users = JSON.parse(
   fs.readFileSync(usersPath, "utf8")
@@ -24,6 +26,13 @@ for (const user of Object.values(users)) {
   const currentCards = user.cards || [];
   user.cards = currentCards.filter(card => card.memberId);
   removedLegacyCards ||= user.cards.length !== currentCards.length;
+
+  for (const card of user.cards) {
+    if (!card.generation) {
+      card.generation = 1;
+      removedLegacyCards = true;
+    }
+  }
 }
 
 function saveUsers() {
@@ -63,13 +72,17 @@ function getCardOddsProbability(card) {
     "🌈 Rainbow": 0.001
   };
 
+  const memberProbability = 1 / (card.memberPoolSize || 1);
+
   if (card.variant === "👑 God") {
-    return 0.05 *
+    return memberProbability *
+      0.05 *
       (godPackRarityOdds[card.rarity] || 0) *
       (card.prismatic ? 0.01 : 0.99);
   }
 
-  return 0.95 *
+  return memberProbability *
+    0.95 *
     (normalRarityOdds[card.rarity] || 0) *
     (variantOdds[card.variant] || 0);
 }
@@ -83,8 +96,12 @@ function formatCardOdds(card) {
   const percentageText = percentage >= 0.01
     ? percentage.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")
     : percentage.toPrecision(3);
+  const oneIn = 1 / probability;
+  const oneInText = oneIn < 10
+    ? oneIn.toFixed(2)
+    : Math.round(oneIn).toLocaleString("en-US");
 
-  return `1 in ${Math.round(1 / probability).toLocaleString("en-US")} (${percentageText}%)`;
+  return `${percentageText}% (1 in ${oneInText})`;
 }
 
 function recordPackStats(teamId, slackUserId, pack) {
@@ -150,6 +167,10 @@ function getPackCooldown(user) {
   if (!user.lastPack) return 0;
 
   return Math.max(0, PACK_COOLDOWN - (Date.now() - user.lastPack));
+}
+
+function getCurrentGeneration(timestamp = Date.now()) {
+  return Math.max(1, new Date(timestamp).getUTCFullYear() - 2025);
 }
 
 function getHourKey(timestamp = Date.now()) {
@@ -510,8 +531,11 @@ View your collection
 /slacktcg-leaderboard
 View the workspace's pack, Mythical, and rarest-pull leaders
 
+/slacktcg-odds
+View pull odds, your luckiness, and the workspace's luckiest players
+
 /slacktcg-trade @user <card>
-Trade a member card by first and last name. Capitalization, spaces, and hyphens are optional. Add normal, gold, shiny, rainbow, god, or god-prismatic to specify the card.
+Trade a member card by first and last name. Capitalization, spaces, and hyphens are optional. Add the modifier and generation, such as shiny-gen1, to specify the card.
 
 Card Rarities: Common 60%, Rare 25%, Epic 10%, Legendary 4%, Mythical 1%
 Modifier Rarities: Normal 96%, Gold 3%, Shiny 0.9%, Rainbow 0.1%
@@ -686,20 +710,50 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
     const prismatic = godPack && Math.random() < 0.01;
     const rarityProbability = getRarityProbability(rarity, minimumRarity);
     const pullOddsProbability = godPack
-      ? 0.05 * rarityProbability * (prismatic ? 0.01 : 0.99)
-      : 0.95 * rarityProbability * getVariantProbability(variant);
+      ? (1 / memberCards.length) *
+        0.05 *
+        rarityProbability *
+        (prismatic ? 0.01 : 0.99)
+      : (1 / memberCards.length) *
+        0.95 *
+        rarityProbability *
+        getVariantProbability(variant);
 
     pack.push({
       ...card,
       rarity,
       variant,
       prismatic,
+      generation: getCurrentGeneration(),
+      memberPoolSize: memberCards.length,
       pullOddsProbability
     });
   }
 
   users[userId].cards.push(...pack);
   user.packsOpened = (user.packsOpened || 0) + 1;
+  user.pullStats ||= {
+    totalPulls: 0,
+    rarePulls: 0,
+    expectedRarePulls: 0
+  };
+  const standardPackWeight = rarityWeights.reduce(
+    (total, item) => total + item.chance,
+    0
+  );
+  const commonWeight = rarityWeights.find(
+    item => item.rarity === "Common"
+  ).chance;
+  const standardRareProbability =
+    1 - commonWeight / standardPackWeight;
+  const overallRareProbability =
+    0.05 + 0.95 * standardRareProbability;
+  user.pullStats.totalPulls += pack.length;
+  user.pullStats.rarePulls += pack.filter(
+    card => card.rarity !== "Common"
+  ).length;
+  user.pullStats.expectedRarePulls +=
+    pack.length * overallRareProbability;
   user.lastPack = Date.now();
   recordPackStats(command.team_id, command.user_id, pack);
   saveUsers();
@@ -709,7 +763,8 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
     .flatMap(card => {
       let text =
         `🃏 *${card.name}*
-${rarityIcons[card.rarity]} *${card.rarity}*`;
+${rarityIcons[card.rarity]} *${card.rarity}*
+📅 *Gen ${card.generation || 1}*`;
 
       if (card.variant !== "Normal") {
         text += `\n✨ Modifier: ${card.variant}`;
@@ -719,7 +774,7 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
         text += "\n🔮 Finish: *Prismatic*";
       }
 
-      text += `\n🎲 Total odds: *${formatCardOdds(card)}*`;
+      text += `\n🎲 Exact card odds: *${formatCardOdds(card)}*`;
 
       const cardBlock = {
         type: "section",
@@ -811,7 +866,14 @@ function findTradeCard(cards, cardArg) {
     rainbow: "🌈 Rainbow",
     god: "👑 God"
   };
-  const explicitVariant = cardArg.match(
+  const generationMatch = cardArg.match(
+    /^(.*?)[\s_-]+gen(?:eration)?[\s_-]*(\d+)\s*$/i
+  );
+  const requestedGeneration = generationMatch
+    ? Number(generationMatch[2])
+    : null;
+  const tradeInput = generationMatch ? generationMatch[1] : cardArg;
+  const explicitVariant = tradeInput.match(
     /^(.*?)[\s_-]+(normal|gold|shiny|rainbow|god)(?:[\s_-]+(prismatic))?\s*$/i
   );
   let candidates;
@@ -823,7 +885,11 @@ function findTradeCard(cards, cardArg) {
       .map((card, index) => ({ card, index }))
       .filter(({ card }) =>
         card.variant === requestedVariant &&
-        Boolean(card.prismatic) === Boolean(explicitVariant[3])
+        Boolean(card.prismatic) === Boolean(explicitVariant[3]) &&
+        (
+          requestedGeneration === null ||
+          (card.generation || 1) === requestedGeneration
+        )
       )
       .map(match => ({
         ...match,
@@ -833,9 +899,13 @@ function findTradeCard(cards, cardArg) {
         )
       }));
   } else {
-    const requestedCard = normalizeCardName(cardArg);
+    const requestedCard = normalizeCardName(tradeInput);
     candidates = cards
       .map((card, index) => ({ card, index }))
+      .filter(({ card }) =>
+        requestedGeneration === null ||
+        (card.generation || 1) === requestedGeneration
+      )
       .map(match => {
         const card = match.card;
         const modifier = card.variant === "Normal"
@@ -861,7 +931,8 @@ function findTradeCard(cards, cardArg) {
 
   for (const match of matches) {
     const key =
-      `${match.card.name.toLowerCase()}:${match.card.variant}:${Boolean(match.card.prismatic)}`;
+      `${match.card.name.toLowerCase()}:${match.card.variant}:` +
+      `${Boolean(match.card.prismatic)}:${match.card.generation || 1}`;
     if (!uniqueMatches.has(key)) uniqueMatches.set(key, match);
   }
 
@@ -884,7 +955,8 @@ app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
 
   for (const card of users[userId].cards) {
     const key =
-      `${card.id}-${card.rarity}-${card.variant}-${Boolean(card.prismatic)}`;
+      `${card.id}-${card.rarity}-${card.variant}-${Boolean(card.prismatic)}-` +
+      `${card.generation || 1}-${getCardOddsProbability(card)}`;
 
     if (!grouped[key]) {
       grouped[key] = {
@@ -896,26 +968,29 @@ app.command("/slacktcg-inventory", async ({ command, ack, respond }) => {
     grouped[key].count++;
   }
 
-  const inventoryEntries = Object.values(grouped)
+  const groupedCards = Object.values(grouped);
+  const inventoryEntries = groupedCards
     .sort((a, b) => {
-      // Sort by rarity
-      const rarityDiff =
+      const oddsDifference =
+        getCardOddsProbability(a) - getCardOddsProbability(b);
+
+      if (oddsDifference !== 0) return oddsDifference;
+
+      const rarityDifference =
         (rarityOrder[a.rarity] ?? 999) -
         (rarityOrder[b.rarity] ?? 999);
 
-      if (rarityDiff !== 0) return rarityDiff;
+      if (rarityDifference !== 0) return rarityDifference;
 
-      // Then by name
-      const nameDiff = a.name.localeCompare(b.name);
-      if (nameDiff !== 0) return nameDiff;
-
-      // Then by variant
-      return a.variant.localeCompare(b.variant);
+      return a.name.localeCompare(b.name);
     })
+    .slice(0, 15)
     .map(card => {
       let text =
         `🃏 *${card.name}* x${card.count}
-${rarityIcons[card.rarity]} *${card.rarity}*`;
+${rarityIcons[card.rarity]} *${card.rarity}*
+📅 *Gen ${card.generation || 1}*
+🎲 Exact card odds: *${formatCardOdds(card)}*`;
 
       if (card.variant !== "Normal") {
         text += `\n✨ Modifier: ${card.variant}`;
@@ -947,6 +1022,22 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
   if (currentChunk) inventoryChunks.push(currentChunk);
 
   const visibleChunks = inventoryChunks.slice(0, 49);
+  const rarityTotals = {
+    Common: 0,
+    Rare: 0,
+    Epic: 0,
+    Legendary: 0,
+    Mythical: 0
+  };
+
+  for (const card of users[userId].cards) {
+    if (card.rarity in rarityTotals) {
+      rarityTotals[card.rarity]++;
+    }
+  }
+  const raritySummary = Object.entries(rarityTotals)
+    .map(([rarity, count]) => `${rarityIcons[rarity]} ${rarity}: *${count}*`)
+    .join("  ·  ");
 
   if (inventoryChunks.length > 49) {
     visibleChunks[48] =
@@ -959,8 +1050,19 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
         type: "header",
         text: {
           type: "plain_text",
-          text: "🎒 Your SlackTCG Inventory"
+          text: "🎒 Your 15 Rarest Cards"
         }
+      },
+      {
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text:
+              `Showing ${Math.min(15, groupedCards.length)} of ` +
+              `${groupedCards.length} unique cards.\n${raritySummary}`
+          }
+        ]
       },
       ...visibleChunks.map(text => ({
         type: "section",
@@ -1014,7 +1116,8 @@ app.command("/slacktcg-leaderboard", async ({ command, ack, respond }) => {
       `${rarityIcons[card.rarity]} *${card.rarity}*` +
       (card.variant !== "Normal" ? ` · ${card.variant}` : "") +
       (card.prismatic ? " · 🔮 Prismatic" : "") +
-      `\n🎲 Total odds: *${formatCardOdds(card)}*` +
+      ` · 📅 Gen ${card.generation || 1}` +
+      `\n🎲 Exact card odds: *${formatCardOdds(card)}*` +
       `\nPulled by <@${rarestPull.pulledBy}>`;
   }
 
@@ -1062,6 +1165,122 @@ app.command("/slacktcg-leaderboard", async ({ command, ack, respond }) => {
   });
 });
 
+function getLuckiness(user) {
+  const pullStats = user.pullStats;
+
+  if (!pullStats?.totalPulls || !pullStats.expectedRarePulls) return null;
+
+  return pullStats.rarePulls / pullStats.expectedRarePulls * 100;
+}
+
+app.command("/slacktcg-odds", async ({ command, ack, respond }) => {
+  await ack();
+
+  const userId = `${command.team_id}:${command.user_id}`;
+  const user = users[userId];
+  const pullStats = user?.pullStats;
+  const luckiness = getLuckiness(user || {});
+  const teamPrefix = `${command.team_id}:`;
+  const luckiestPlayers = Object.entries(users)
+    .filter(([key]) => key.startsWith(teamPrefix))
+    .map(([key, player]) => ({
+      slackUserId: key.slice(teamPrefix.length),
+      luckiness: getLuckiness(player),
+      totalPulls: player.pullStats?.totalPulls || 0,
+      rarePulls: player.pullStats?.rarePulls || 0
+    }))
+    .filter(player => player.luckiness !== null)
+    .sort((a, b) => b.luckiness - a.luckiness)
+    .slice(0, 3);
+
+  const personalLuckText = pullStats
+    ? `${pullStats.rarePulls} Rare+ pulls out of ${pullStats.totalPulls} total\n` +
+      `Expected Rare+ pulls: ${pullStats.expectedRarePulls.toFixed(2)}\n` +
+      `Luckiness: *${luckiness.toFixed(1)}%* ` +
+      `(${luckiness >= 100 ? "above" : "below"} average)`
+    : "_No tracked pulls yet. Open a pack to begin tracking._";
+  const luckiestText = luckiestPlayers.length > 0
+    ? luckiestPlayers.map((player, index) =>
+        `${index + 1}. <@${player.slackUserId}> — ` +
+        `*${player.luckiness.toFixed(1)}%* luckiness ` +
+        `(${player.rarePulls}/${player.totalPulls} Rare+)`
+      ).join("\n")
+    : "_No tracked players yet._";
+
+  await respond({
+    blocks: [
+      {
+        type: "header",
+        text: {
+          type: "plain_text",
+          text: "🎲 SlackTCG Odds & Luck"
+        }
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            "*Card Rarity Odds*\n" +
+            "⚪ Common: 60%\n" +
+            "🔵 Rare: 25%\n" +
+            "🟣 Epic: 10%\n" +
+            "🟠 Legendary: 4%\n" +
+            "🔴 Mythical: 1%"
+        }
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            "*Modifier & Finish Odds*\n" +
+            "Normal: 96%\n" +
+            "🟨 Gold: 3%\n" +
+            "✨ Shiny: 0.9%\n" +
+            "🌈 Rainbow: 0.1%\n" +
+            "🔮 Prismatic: 1% per God Pack card"
+        }
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            "*Special Event Odds*\n" +
+            "⚡ God Pack: 5% per pack (1 in 20)\n" +
+            "🍀 Lucky Hour: 10% per hour (1 in 10)\n" +
+            "A God Pack guarantees five Rare-or-better cards. Lucky Hour triples non-Common weights and special-modifier odds."
+        }
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*Your Tracked Luck*\n${personalLuckText}`
+        }
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*Luckiest Players*\n${luckiestText}`
+        }
+      },
+      {
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text:
+              "100% luckiness means the player has exactly their statistically expected number of Rare+ pulls. Tracking begins after this update."
+          }
+        ]
+      }
+    ]
+  });
+});
+
 app.command("/slacktcg-trade", async ({ command, ack, respond, client }) => {
   await ack();
 
@@ -1090,6 +1309,11 @@ app.command("/slacktcg-trade", async ({ command, ack, respond, client }) => {
 
   const targetId = `${command.team_id}:${targetSlackId}`;
 
+  if (targetSlackId === command.user_id) {
+    await respond("❌ You can't trade a card to yourself.");
+    return;
+  }
+
   if (!users[senderId] || users[senderId].cards.length === 0) {
     await respond("❌ You don't have any cards.");
     return;
@@ -1112,39 +1336,373 @@ app.command("/slacktcg-trade", async ({ command, ack, respond, client }) => {
 
   if (matchingCards.length > 1) {
     await respond(
-      "❌ That card name is ambiguous. Add `-normal`, `-gold`, `-shiny`, `-rainbow`, `-god`, or `-god-prismatic` to specify the exact card."
+      "❌ That card name is ambiguous. Add its modifier and generation, such as `-shiny-gen1`, to specify the exact card."
     );
     return;
   }
 
-  const tradedCard = users[senderId].cards.splice(
-    matchingCards[0].index,
-    1
-  )[0];
+  const requestedCard = matchingCards[0].card;
+  const tradeId = crypto.randomUUID();
+  let cardText =
+    `🃏 *${requestedCard.name}*\n` +
+    `${rarityIcons[requestedCard.rarity]} ${requestedCard.rarity}\n` +
+    `📅 Gen ${requestedCard.generation || 1}`;
 
-  users[targetId].cards.push(tradedCard);
-
-  saveUsers();
-
-  let text =
-    `🤝 *Trade Complete!*\n\n` +
-    `<@${command.user_id}> gave:\n` +
-    `🃏 *${tradedCard.name}*\n` +
-    `${rarityIcons[tradedCard.rarity]} ${tradedCard.rarity}`;
-
-  if (tradedCard.variant !== "Normal") {
-    text += `\n✨ Modifier: ${tradedCard.variant}`;
+  if (requestedCard.variant !== "Normal") {
+    cardText += `\n✨ Modifier: ${requestedCard.variant}`;
   }
 
-  if (tradedCard.prismatic) {
-    text += "\n🔮 Finish: *Prismatic*";
+  if (requestedCard.prismatic) {
+    cardText += "\n🔮 Finish: *Prismatic*";
   }
 
-  text += `\n\nTo:\n<@${targetSlackId}>`;
+  pendingTrades.set(tradeId, {
+    senderId,
+    senderSlackId: command.user_id,
+    targetId,
+    targetSlackId,
+    card: requestedCard,
+    expiresAt: Date.now() + TRADE_EXPIRATION
+  });
+  setTimeout(() => pendingTrades.delete(tradeId), TRADE_EXPIRATION);
 
   await respond({
     response_type: "in_channel",
-    text
+    text: `<@${command.user_id}> wants to trade ${requestedCard.name} to <@${targetSlackId}>.`,
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            `🤝 *Trade Request*\n\n` +
+            `<@${command.user_id}> wants to give this card to <@${targetSlackId}>:\n\n` +
+            cardText +
+            "\n\n_This request expires in 10 minutes._"
+        }
+      },
+      {
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            action_id: "slacktcg_offer_trade_card",
+            text: {
+              type: "plain_text",
+              text: "Offer Your Card"
+            },
+            style: "primary",
+            value: tradeId
+          },
+          {
+            type: "button",
+            action_id: "slacktcg_decline_trade",
+            text: {
+              type: "plain_text",
+              text: "Decline"
+            },
+            style: "danger",
+            value: tradeId
+          }
+        ]
+      }
+    ]
+  });
+});
+
+async function rejectUnauthorizedTradeAction(client, body) {
+  await client.chat.postEphemeral({
+    channel: body.channel.id,
+    user: body.user.id,
+    text: "❌ You are not allowed to perform that action on this trade."
+  });
+}
+
+app.action("slacktcg_offer_trade_card", async ({
+  ack,
+  body,
+  action,
+  client
+}) => {
+  await ack();
+
+  const trade = pendingTrades.get(action.value);
+
+  if (!trade || Date.now() >= trade.expiresAt) {
+    pendingTrades.delete(action.value);
+    await client.chat.postEphemeral({
+      channel: body.channel.id,
+      user: body.user.id,
+      text: "⌛ This trade request has expired."
+    });
+    return;
+  }
+
+  if (body.user.id !== trade.targetSlackId) {
+    await rejectUnauthorizedTradeAction(client, body);
+    return;
+  }
+
+  trade.channelId = body.channel.id;
+  trade.messageTs = body.message.ts;
+
+  await client.views.open({
+    trigger_id: body.trigger_id,
+    view: {
+      type: "modal",
+      callback_id: "slacktcg_trade_offer_modal",
+      private_metadata: action.value,
+      title: {
+        type: "plain_text",
+        text: "Offer a Card"
+      },
+      submit: {
+        type: "plain_text",
+        text: "Make Offer"
+      },
+      close: {
+        type: "plain_text",
+        text: "Cancel"
+      },
+      blocks: [
+        {
+          type: "input",
+          block_id: "card_input",
+          label: {
+            type: "plain_text",
+            text: "Card to offer"
+          },
+          element: {
+            type: "plain_text_input",
+            action_id: "card_name",
+            placeholder: {
+              type: "plain_text",
+              text: "Example: Carter Anthony-shiny"
+            }
+          }
+        }
+      ]
+    }
+  });
+});
+
+app.view("slacktcg_trade_offer_modal", async ({
+  ack,
+  body,
+  view,
+  client
+}) => {
+  const tradeId = view.private_metadata;
+  const trade = pendingTrades.get(tradeId);
+  const cardArg =
+    view.state.values.card_input.card_name.value.trim();
+
+  if (
+    !trade ||
+    Date.now() >= trade.expiresAt ||
+    body.user.id !== trade?.targetSlackId
+  ) {
+    await ack({
+      response_action: "errors",
+      errors: {
+        card_input: "This trade request has expired or is no longer available."
+      }
+    });
+    return;
+  }
+
+  const matchingCards = findTradeCard(
+    users[trade.targetId]?.cards || [],
+    cardArg
+  );
+
+  if (matchingCards.length === 0) {
+    await ack({
+      response_action: "errors",
+      errors: {
+        card_input: `You don't own a card matching "${cardArg}".`
+      }
+    });
+    return;
+  }
+
+  if (matchingCards.length > 1) {
+    await ack({
+      response_action: "errors",
+      errors: {
+        card_input: "That card is ambiguous. Add its modifier and generation, such as -shiny-gen1."
+      }
+    });
+    return;
+  }
+
+  trade.targetCard = matchingCards[0].card;
+  await ack();
+
+  const offeredCard = trade.targetCard;
+  let offeredCardText =
+    `🃏 *${offeredCard.name}*\n` +
+    `${rarityIcons[offeredCard.rarity]} ${offeredCard.rarity}\n` +
+    `📅 Gen ${offeredCard.generation || 1}`;
+
+  if (offeredCard.variant !== "Normal") {
+    offeredCardText += `\n✨ Modifier: ${offeredCard.variant}`;
+  }
+
+  if (offeredCard.prismatic) {
+    offeredCardText += "\n🔮 Finish: *Prismatic*";
+  }
+
+  await client.chat.update({
+    channel: trade.channelId,
+    ts: trade.messageTs,
+    text:
+      `<@${trade.targetSlackId}> offered ${offeredCard.name} to ` +
+      `<@${trade.senderSlackId}>.`,
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            `🤝 *Trade Counteroffer*\n\n` +
+            `<@${trade.senderSlackId}> offers:\n${trade.card.name} · ` +
+            `${trade.card.rarity} · ${trade.card.variant}` +
+            (trade.card.prismatic ? " · Prismatic" : "") +
+            ` · Gen ${trade.card.generation || 1}` +
+            `\n\n<@${trade.targetSlackId}> offers:\n${offeredCardText}\n\n` +
+            `<@${trade.senderSlackId}>, accept this swap?`
+        }
+      },
+      {
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            action_id: "slacktcg_confirm_trade",
+            text: {
+              type: "plain_text",
+              text: "Accept Swap"
+            },
+            style: "primary",
+            value: tradeId
+          },
+          {
+            type: "button",
+            action_id: "slacktcg_decline_trade",
+            text: {
+              type: "plain_text",
+              text: "Decline"
+            },
+            style: "danger",
+            value: tradeId
+          }
+        ]
+      }
+    ]
+  });
+});
+
+app.action("slacktcg_confirm_trade", async ({
+  ack,
+  body,
+  action,
+  respond,
+  client
+}) => {
+  await ack();
+
+  const trade = pendingTrades.get(action.value);
+
+  if (!trade || Date.now() >= trade.expiresAt || !trade.targetCard) {
+    pendingTrades.delete(action.value);
+    await respond({
+      replace_original: true,
+      text: "⌛ This trade request has expired."
+    });
+    return;
+  }
+
+  if (body.user.id !== trade.senderSlackId) {
+    await client.chat.postEphemeral({
+      channel: body.channel.id,
+      user: body.user.id,
+      text: "❌ Only the original sender can accept this counteroffer."
+    });
+    return;
+  }
+
+  const senderCardIndex =
+    users[trade.senderId]?.cards.indexOf(trade.card) ?? -1;
+  const targetCardIndex =
+    users[trade.targetId]?.cards.indexOf(trade.targetCard) ?? -1;
+
+  if (senderCardIndex === -1 || targetCardIndex === -1) {
+    pendingTrades.delete(action.value);
+    await respond({
+      replace_original: true,
+      text: "❌ This trade is no longer available because one of the cards is no longer owned by its offerer."
+    });
+    return;
+  }
+
+  const senderCard =
+    users[trade.senderId].cards.splice(senderCardIndex, 1)[0];
+  const targetCard =
+    users[trade.targetId].cards.splice(targetCardIndex, 1)[0];
+  users[trade.senderId].cards.push(targetCard);
+  users[trade.targetId].cards.push(senderCard);
+  saveUsers();
+  pendingTrades.delete(action.value);
+
+  await respond({
+    replace_original: true,
+    text:
+      `🤝 *Trade Complete!*\n\n` +
+      `<@${trade.senderSlackId}> received *${targetCard.name}* ` +
+      `(Gen ${targetCard.generation || 1}) from ` +
+      `<@${trade.targetSlackId}>.\n` +
+      `<@${trade.targetSlackId}> received *${senderCard.name}* ` +
+      `(Gen ${senderCard.generation || 1}) from ` +
+      `<@${trade.senderSlackId}>.`
+  });
+});
+
+app.action("slacktcg_decline_trade", async ({
+  ack,
+  body,
+  action,
+  respond,
+  client
+}) => {
+  await ack();
+
+  const trade = pendingTrades.get(action.value);
+
+  if (!trade || Date.now() >= trade.expiresAt) {
+    pendingTrades.delete(action.value);
+    await respond({
+      replace_original: true,
+      text: "⌛ This trade request has expired."
+    });
+    return;
+  }
+
+  const allowedToDecline = trade.targetCard
+    ? [trade.senderSlackId, trade.targetSlackId]
+    : [trade.targetSlackId];
+
+  if (!allowedToDecline.includes(body.user.id)) {
+    await rejectUnauthorizedTradeAction(client, body);
+    return;
+  }
+
+  pendingTrades.delete(action.value);
+  await respond({
+    replace_original: true,
+    text:
+      `❌ <@${body.user.id}> declined the trade between ` +
+      `<@${trade.senderSlackId}> and <@${trade.targetSlackId}>.`
   });
 });
 
