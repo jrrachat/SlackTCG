@@ -761,26 +761,25 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
 
   const packBlocks = pack
     .flatMap(card => {
-      let text =
-        `🃏 *${card.name}*
-${rarityIcons[card.rarity]} *${card.rarity}*
-📅 *Gen ${card.generation || 1}*`;
+      let details =
+        `${rarityIcons[card.rarity]} *${card.rarity}* · ` +
+        `Gen ${card.generation || 1}`;
 
       if (card.variant !== "Normal") {
-        text += `\n✨ Modifier: ${card.variant}`;
+        details += ` · ${card.variant}`;
       }
 
       if (card.prismatic) {
-        text += "\n🔮 Finish: *Prismatic*";
+        details += " · 🔮 Prismatic";
       }
 
-      text += `\nOdds: *${formatCardOdds(card)}*`;
+      details += `\nOdds: *${formatCardOdds(card)}*`;
 
       const cardBlock = {
         type: "section",
         text: {
           type: "mrkdwn",
-          text
+          text: `🃏 *${card.name}*`
         }
       };
 
@@ -792,11 +791,23 @@ ${rarityIcons[card.rarity]} *${card.rarity}*
         };
       }
 
-      return [cardBlock];
+      return [
+        cardBlock,
+        {
+          type: "context",
+          elements: [
+            {
+              type: "mrkdwn",
+              text: details
+            }
+          ]
+        }
+      ];
     });
 
 
   await respond({
+    response_type: "in_channel",
     blocks: [
       {
         type: "header",
@@ -1131,8 +1142,8 @@ app.command("/slacktcg-leaderboard", async ({ command, ack, respond }) => {
         }
       },
       {
-        type: "section",
-        text: {
+        type: "context",
+        elements: [{
           type: "mrkdwn",
           text: `*Most Packs Opened*\n${formatRanking(
             topPackOpeners,
@@ -1140,11 +1151,11 @@ app.command("/slacktcg-leaderboard", async ({ command, ack, respond }) => {
             "pack",
             "packs"
           )}`
-        }
+        }]
       },
       {
-        type: "section",
-        text: {
+        type: "context",
+        elements: [{
           type: "mrkdwn",
           text: `*Most Mythicals Owned*\n${formatRanking(
             topMythicalOwners,
@@ -1152,14 +1163,14 @@ app.command("/slacktcg-leaderboard", async ({ command, ack, respond }) => {
             "Mythical",
             "Mythicals"
           )}`
-        }
+        }]
       },
       {
-        type: "section",
-        text: {
+        type: "context",
+        elements: [{
           type: "mrkdwn",
           text: `*Rarest Card Ever Pulled*\n${rarestPullText}`
-        }
+        }]
       }
     ]
   });
@@ -1208,6 +1219,7 @@ app.command("/slacktcg-odds", async ({ command, ack, respond }) => {
     : "_No tracked players yet._";
 
   await respond({
+    response_type: "in_channel",
     blocks: [
       {
         type: "header",
@@ -1217,8 +1229,8 @@ app.command("/slacktcg-odds", async ({ command, ack, respond }) => {
         }
       },
       {
-        type: "section",
-        text: {
+        type: "context",
+        elements: [{
           type: "mrkdwn",
           text:
             "*Card Rarity Odds*\n" +
@@ -1227,11 +1239,11 @@ app.command("/slacktcg-odds", async ({ command, ack, respond }) => {
             "🟣 Epic: 10%\n" +
             "🟠 Legendary: 4%\n" +
             "🔴 Mythical: 1%"
-        }
+        }]
       },
       {
-        type: "section",
-        text: {
+        type: "context",
+        elements: [{
           type: "mrkdwn",
           text:
             "*Modifier & Finish Odds*\n" +
@@ -1240,31 +1252,31 @@ app.command("/slacktcg-odds", async ({ command, ack, respond }) => {
             "✨ Shiny: 0.9%\n" +
             "🌈 Rainbow: 0.1%\n" +
             "🔮 Prismatic: 1% per God Pack card"
-        }
+        }]
       },
       {
-        type: "section",
-        text: {
+        type: "context",
+        elements: [{
           type: "mrkdwn",
           text:
             "*Special Event Odds*\n" +
             "⚡ God Pack: 5% per pack (1 in 20)\n" +
             "🍀 Lucky Hour: 10% per hour (1 in 10)"
-        }
+        }]
       },
       {
-        type: "section",
-        text: {
+        type: "context",
+        elements: [{
           type: "mrkdwn",
           text: `*Your Tracked Luck*\n${personalLuckText}`
-        }
+        }]
       },
       {
-        type: "section",
-        text: {
+        type: "context",
+        elements: [{
           type: "mrkdwn",
           text: `*Luckiest Players*\n${luckiestText}`
-        }
+        }]
       },
       {
         type: "context",
@@ -1617,7 +1629,6 @@ app.action("slacktcg_confirm_trade", async ({
   ack,
   body,
   action,
-  respond,
   client
 }) => {
   await ack();
@@ -1626,8 +1637,9 @@ app.action("slacktcg_confirm_trade", async ({
 
   if (!trade || Date.now() >= trade.expiresAt || !trade.targetCard) {
     pendingTrades.delete(action.value);
-    await respond({
-      replace_original: true,
+    await client.chat.postEphemeral({
+      channel: body.channel.id,
+      user: body.user.id,
       text: "⌛ This trade request has expired."
     });
     return;
@@ -1649,8 +1661,9 @@ app.action("slacktcg_confirm_trade", async ({
 
   if (senderCardIndex === -1 || targetCardIndex === -1) {
     pendingTrades.delete(action.value);
-    await respond({
-      replace_original: true,
+    await client.chat.postEphemeral({
+      channel: body.channel.id,
+      user: body.user.id,
       text: "❌ This trade is no longer available because one of the cards is no longer owned by its offerer."
     });
     return;
@@ -1665,17 +1678,30 @@ app.action("slacktcg_confirm_trade", async ({
   saveUsers();
   pendingTrades.delete(action.value);
 
-  await respond({
-    replace_original: true,
-    text:
-      `🤝 *Trade Complete!*\n\n` +
-      `<@${trade.senderSlackId}> received *${targetCard.name}* ` +
-      `(Gen ${targetCard.generation || 1}) from ` +
-      `<@${trade.targetSlackId}>.\n` +
-      `<@${trade.targetSlackId}> received *${senderCard.name}* ` +
-      `(Gen ${senderCard.generation || 1}) from ` +
-      `<@${trade.senderSlackId}>.`
+  const confirmationResponse = await fetch(trade.responseUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      replace_original: true,
+      response_type: "in_channel",
+      text:
+        `🤝 *Trade Complete!*\n\n` +
+        `<@${trade.senderSlackId}> received *${targetCard.name}* ` +
+        `(Gen ${targetCard.generation || 1}) from ` +
+        `<@${trade.targetSlackId}>.\n` +
+        `<@${trade.targetSlackId}> received *${senderCard.name}* ` +
+        `(Gen ${senderCard.generation || 1}) from ` +
+        `<@${trade.senderSlackId}>.`
+    })
   });
+
+  if (!confirmationResponse.ok) {
+    throw new Error(
+      `Slack trade confirmation failed with ${confirmationResponse.status}`
+    );
+  }
 });
 
 app.action("slacktcg_decline_trade", async ({
