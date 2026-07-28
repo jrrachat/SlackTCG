@@ -115,21 +115,6 @@ function formatCardOdds(card) {
   return `${percentageText}% (1 in ${oneInText})`;
 }
 
-function formatCardRarityScore(card) {
-  const probability = getCardOddsProbability(card);
-
-  if (!probability) return "Unknown";
-
-  const memberProbability = 1 / (card.memberPoolSize || 1);
-  const mostCommonCardProbability =
-    memberProbability * 0.95 * 0.6 * 0.96;
-  const score = mostCommonCardProbability / probability;
-
-  return score >= 100
-    ? Math.round(score).toLocaleString("en-US")
-    : score.toFixed(2).replace(/\.?0+$/, "");
-}
-
 function getRarestPullKey(pull) {
   const card = pull.card;
 
@@ -945,7 +930,7 @@ const rarityOrder = {
 };
 
 function normalizeCardName(value) {
-  return value.toLowerCase().replace(/[\s_-]+/g, "");
+  return value.toLowerCase().replace(/^@/, "").replace(/[\s_-]+/g, "");
 }
 
 function getEditDistance(left, right) {
@@ -973,6 +958,12 @@ function getEditDistance(left, right) {
 }
 
 function findTradeCard(cards, cardArg) {
+  const memberMention = cardArg.match(
+    /<@([A-Z0-9]+)(?:\|[^>]+)?>/i
+  );
+  const cardDescription = memberMention
+    ? cardArg.replace(memberMention[0], "")
+    : cardArg;
   const variants = {
     normal: "Normal",
     gold: "🟨 Gold",
@@ -989,6 +980,7 @@ function findTradeCard(cards, cardArg) {
     mythical: "Mythical"
   };
   const requested = {
+    memberId: memberMention?.[1] || null,
     rarity: null,
     variant: null,
     prismatic: null,
@@ -1028,7 +1020,7 @@ function findTradeCard(cards, cardArg) {
   };
   const nameParts = [];
 
-  for (const part of cardArg.split("-").map(value => value.trim()).filter(Boolean)) {
+  for (const part of cardDescription.split("-").map(value => value.trim()).filter(Boolean)) {
     if (!applyDescriptor(part)) nameParts.push(part);
   }
 
@@ -1046,12 +1038,12 @@ function findTradeCard(cards, cardArg) {
     .map((card, index) => ({
       card,
       index,
-      distance: getEditDistance(
-        normalizeCardName(card.name),
-        requestedName
-      )
+      distance: requested.memberId
+        ? 0
+        : getEditDistance(normalizeCardName(card.name), requestedName)
     }))
     .filter(({ card }) =>
+      (requested.memberId === null || card.memberId === requested.memberId) &&
       (requested.rarity === null || card.rarity === requested.rarity) &&
       (requested.variant === null || card.variant === requested.variant) &&
       (
@@ -1064,7 +1056,11 @@ function findTradeCard(cards, cardArg) {
       )
     );
 
-  if (candidates.length === 0 && nameParts.length !== cardArg.split("-").length) {
+  if (
+    requested.memberId === null &&
+    candidates.length === 0 &&
+    nameParts.length !== cardArg.split("-").length
+  ) {
     requestedName = normalizeCardName(cardArg);
     candidates = cards.map((card, index) => ({
       card,
@@ -1358,7 +1354,7 @@ app.command("/slacktcg-rarestof", async ({
         let details =
           `${rarityIcons[card.rarity] || "🃏"} *${card.rarity}* · ` +
           `Gen ${card.generation || 1} · ` +
-          `Rarity Score: *${formatCardRarityScore(card)}* · ` +
+          `Odds: *${formatCardOdds(card)}* · ` +
           `Owned: *${card.count}*`;
 
         if (card.variant !== "Normal") {
@@ -1427,7 +1423,7 @@ app.command("/slacktcg-leaderboard", async ({ command, ack, respond }) => {
           (card.variant !== "Normal" ? ` · ${card.variant}` : "") +
           (card.prismatic ? " · 🔮 Prismatic" : "") +
           ` · 📅 Gen ${card.generation || 1}` +
-          `\nRarity Score: *${formatCardRarityScore(card)}*` +
+          `\nOdds: *${formatCardOdds(card)}*` +
           ` · Pulled by <@${pull.pulledBy}>`
         );
       }).join("\n\n")
