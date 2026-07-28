@@ -130,6 +130,46 @@ function formatCardRarityScore(card) {
     : score.toFixed(2).replace(/\.?0+$/, "");
 }
 
+function getRarestPullKey(pull) {
+  const card = pull.card;
+
+  return [
+    pull.pulledBy,
+    card.id,
+    card.rarity,
+    card.variant,
+    Boolean(card.prismatic),
+    card.generation || 1
+  ].join(":");
+}
+
+function addRarestPull(teamStats, pull) {
+  const existingPulls = teamStats.rarestPulls ||
+    (teamStats.rarestPull ? [teamStats.rarestPull] : []);
+  const pullsByKey = new Map(
+    existingPulls.map(existing => [getRarestPullKey(existing), existing])
+  );
+
+  const pullKey = getRarestPullKey(pull);
+
+  if (!pullsByKey.has(pullKey)) {
+    pullsByKey.set(pullKey, pull);
+  }
+
+  const nextPulls = [...pullsByKey.values()]
+    .sort((left, right) =>
+      getCardOddsProbability(left.card) -
+      getCardOddsProbability(right.card)
+    )
+    .slice(0, 3);
+  const changed =
+    JSON.stringify(nextPulls) !== JSON.stringify(teamStats.rarestPulls || []);
+
+  teamStats.rarestPulls = nextPulls;
+  teamStats.rarestPull = nextPulls[0] || null;
+  return changed;
+}
+
 function recordPackStats(teamId, slackUserId, pack) {
   stats ||= {};
   stats.teams ||= {};
@@ -138,17 +178,12 @@ function recordPackStats(teamId, slackUserId, pack) {
   for (const card of pack) {
     const probability = getCardOddsProbability(card);
 
-    if (
-      !teamStats.rarestPull ||
-      probability < getCardOddsProbability(teamStats.rarestPull.card)
-    ) {
-      teamStats.rarestPull = {
-        card,
-        probability,
-        pulledBy: slackUserId,
-        pulledAt: Date.now()
-      };
-    }
+    addRarestPull(teamStats, {
+      card,
+      probability,
+      pulledBy: slackUserId,
+      pulledAt: Date.now()
+    });
   }
 
   saveStats();
@@ -156,6 +191,7 @@ function recordPackStats(teamId, slackUserId, pack) {
 
 function refreshRarestPullsFromInventories() {
   let changed = false;
+  stats.teams ||= {};
 
   for (const [userKey, user] of Object.entries(users)) {
     const separatorIndex = userKey.indexOf(":");
@@ -170,20 +206,13 @@ function refreshRarestPullsFromInventories() {
 
       const probability = getCardOddsProbability(card);
 
-      if (
-        probability &&
-        (
-          !teamStats.rarestPull ||
-          probability < getCardOddsProbability(teamStats.rarestPull.card)
-        )
-      ) {
-        teamStats.rarestPull = {
+      if (probability) {
+        changed = addRarestPull(teamStats, {
           card,
           probability,
           pulledBy: slackUserId,
           pulledAt: null
-        };
-        changed = true;
+        }) || changed;
       }
     }
   }
@@ -577,7 +606,7 @@ View your or another player's five rarest cards
 View another player's five rarest cards
 
 /slacktcg-leaderboard
-View the workspace's pack, Mythical, and rarest-pull leaders
+View the workspace's pack-opening leaders and rarest pull
 
 /slacktcg-odds
 View pull odds, your luckiness, and the workspace's luckiest players
@@ -1369,21 +1398,16 @@ app.command("/slacktcg-leaderboard", async ({ command, ack, respond }) => {
     .filter(([key]) => key.startsWith(teamPrefix))
     .map(([key, user]) => ({
       slackUserId: key.slice(teamPrefix.length),
-      packsOpened: user.packsOpened || 0,
-      mythicals: (user.cards || []).filter(
-        card => card.rarity === "Mythical"
-      ).length
+      packsOpened: user.packsOpened || 0
     }));
 
   const topPackOpeners = [...workspaceUsers]
     .filter(user => user.packsOpened > 0)
     .sort((a, b) => b.packsOpened - a.packsOpened)
-    .slice(0, 3);
-  const topMythicalOwners = [...workspaceUsers]
-    .filter(user => user.mythicals > 0)
-    .sort((a, b) => b.mythicals - a.mythicals)
-    .slice(0, 3);
-  const rarestPull = stats.teams[command.team_id]?.rarestPull;
+    .slice(0, 15);
+  const teamStats = stats.teams[command.team_id] || {};
+  const rarestPulls = teamStats.rarestPulls ||
+    (teamStats.rarestPull ? [teamStats.rarestPull] : []);
 
   const formatRanking = (ranking, property, singular, plural) =>
     ranking.length > 0
@@ -1393,19 +1417,21 @@ app.command("/slacktcg-leaderboard", async ({ command, ack, respond }) => {
         }).join("\n")
       : "_No qualifying players yet._";
 
-  let rarestPullText = "_No cards have been recorded yet._";
+  const rarestPullText = rarestPulls.length > 0
+    ? rarestPulls.map((pull, index) => {
+        const card = pull.card;
 
-  if (rarestPull) {
-    const card = rarestPull.card;
-    rarestPullText =
-      `🃏 *${card.name}*\n` +
-      `${rarityIcons[card.rarity]} *${card.rarity}*` +
-      (card.variant !== "Normal" ? ` · ${card.variant}` : "") +
-      (card.prismatic ? " · 🔮 Prismatic" : "") +
-      ` · 📅 Gen ${card.generation || 1}` +
-      `\nOdds: *${formatCardOdds(card)}*` +
-      `\nPulled by <@${rarestPull.pulledBy}>`;
-  }
+        return (
+          `*${index + 1}.* 🃏 *${card.name}*\n` +
+          `${rarityIcons[card.rarity] || "🃏"} *${card.rarity}*` +
+          (card.variant !== "Normal" ? ` · ${card.variant}` : "") +
+          (card.prismatic ? " · 🔮 Prismatic" : "") +
+          ` · 📅 Gen ${card.generation || 1}` +
+          `\nRarity Score: *${formatCardRarityScore(card)}*` +
+          ` · Pulled by <@${pull.pulledBy}>`
+        );
+      }).join("\n\n")
+    : "_No cards have been recorded yet._";
 
   await respond({
     blocks: [
@@ -1432,19 +1458,7 @@ app.command("/slacktcg-leaderboard", async ({ command, ack, respond }) => {
         type: "context",
         elements: [{
           type: "mrkdwn",
-          text: `*Most Mythicals Owned*\n${formatRanking(
-            topMythicalOwners,
-            "mythicals",
-            "Mythical",
-            "Mythicals"
-          )}`
-        }]
-      },
-      {
-        type: "context",
-        elements: [{
-          type: "mrkdwn",
-          text: `*Rarest Card Ever Pulled*\n${rarestPullText}`
+          text: `*3 Rarest Cards Ever Pulled*\n${rarestPullText}`
         }]
       }
     ]
