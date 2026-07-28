@@ -1337,19 +1337,23 @@ app.command("/slacktcg-odds", async ({ command, ack, respond }) => {
   });
 });
 
-app.command("/slacktcg", async ({ command, ack, respond, client }) => {
+async function handleMergeCommand({ command, ack, respond, client }) {
   await ack();
 
   try {
-  const [subcommand, rarityArg, ...extraArgs] =
-    command.text.trim().split(/\s+/);
+  const commandArgs = command.text.trim().split(/\s+/).filter(Boolean);
+  const isDedicatedMergeCommand = command.command === "/slacktcg-merge";
+  const subcommand = isDedicatedMergeCommand ? "merge" : commandArgs.shift();
+  const rarityArg = commandArgs.shift();
 
   if (
     subcommand?.toLowerCase() !== "merge" ||
     !rarityArg ||
-    extraArgs.length > 0
+    commandArgs.length > 0
   ) {
-    await respond("❌ Usage: `/slacktcg merge <rarity>`");
+    await respond(
+      "❌ Usage: `/slacktcg merge <rarity>` or `/slacktcg-merge <rarity>`"
+    );
     return;
   }
 
@@ -1485,7 +1489,10 @@ app.command("/slacktcg", async ({ command, ack, respond, client }) => {
       console.error("Could not send merge error response", responseError);
     }
   }
-});
+}
+
+app.command("/slacktcg", handleMergeCommand);
+app.command("/slacktcg-merge", handleMergeCommand);
 
 function formatAuctionCard(card) {
   let text =
