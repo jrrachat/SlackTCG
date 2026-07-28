@@ -16,6 +16,8 @@ in every channel.
 Every pack has a 5% chance to become a **GOD PACK**. All five cards feature the
 same random channel member, are Rare or higher, and have the God modifier.
 God Packs are the only source of Prismatic cards, with a 1% chance per card.
+Every pulled card displays its combined pack-type, rarity, modifier, and finish
+odds. The leaderboard's rarest pull uses this combined probability.
 
 # How to use each command
 

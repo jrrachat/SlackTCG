@@ -40,37 +40,66 @@ function saveStats() {
   );
 }
 
-function getCardPrestige(card) {
-  const rarityRank = {
-    Common: 1,
-    Rare: 2,
-    Epic: 3,
-    Legendary: 4,
-    Mythical: 5
+function getCardOddsProbability(card) {
+  if (card.pullOddsProbability) return card.pullOddsProbability;
+
+  const normalRarityOdds = {
+    Common: 0.6,
+    Rare: 0.25,
+    Epic: 0.1,
+    Legendary: 0.04,
+    Mythical: 0.01
   };
-  const variantRank = {
-    Normal: 0,
-    "🟨 Gold": 1,
-    "✨ Shiny": 2,
-    "🌈 Rainbow": 3,
-    "👑 God": 4
+  const godPackRarityOdds = {
+    Rare: 0.625,
+    Epic: 0.25,
+    Legendary: 0.1,
+    Mythical: 0.025
+  };
+  const variantOdds = {
+    Normal: 0.96,
+    "🟨 Gold": 0.03,
+    "✨ Shiny": 0.009,
+    "🌈 Rainbow": 0.001
   };
 
-  return (rarityRank[card.rarity] || 0) * 10 +
-    (variantRank[card.variant] || 0) +
-    (card.prismatic ? 5 : 0);
+  if (card.variant === "👑 God") {
+    return 0.05 *
+      (godPackRarityOdds[card.rarity] || 0) *
+      (card.prismatic ? 0.01 : 0.99);
+  }
+
+  return 0.95 *
+    (normalRarityOdds[card.rarity] || 0) *
+    (variantOdds[card.variant] || 0);
+}
+
+function formatCardOdds(card) {
+  const probability = getCardOddsProbability(card);
+
+  if (!probability) return "Unknown odds";
+
+  const percentage = probability * 100;
+  const percentageText = percentage >= 0.01
+    ? percentage.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")
+    : percentage.toPrecision(3);
+
+  return `1 in ${Math.round(1 / probability).toLocaleString("en-US")} (${percentageText}%)`;
 }
 
 function recordPackStats(teamId, slackUserId, pack) {
   const teamStats = stats.teams[teamId] ||= {};
 
   for (const card of pack) {
-    const prestige = getCardPrestige(card);
+    const probability = getCardOddsProbability(card);
 
-    if (!teamStats.rarestPull || prestige > teamStats.rarestPull.prestige) {
+    if (
+      !teamStats.rarestPull ||
+      probability < getCardOddsProbability(teamStats.rarestPull.card)
+    ) {
       teamStats.rarestPull = {
         card,
-        prestige,
+        probability,
         pulledBy: slackUserId,
         pulledAt: Date.now()
       };
@@ -79,6 +108,43 @@ function recordPackStats(teamId, slackUserId, pack) {
 
   saveStats();
 }
+
+function refreshRarestPullsFromInventories() {
+  let changed = false;
+
+  for (const [userKey, user] of Object.entries(users)) {
+    const separatorIndex = userKey.indexOf(":");
+    if (separatorIndex === -1) continue;
+
+    const teamId = userKey.slice(0, separatorIndex);
+    const slackUserId = userKey.slice(separatorIndex + 1);
+    const teamStats = stats.teams[teamId] ||= {};
+
+    for (const card of user.cards || []) {
+      const probability = getCardOddsProbability(card);
+
+      if (
+        probability &&
+        (
+          !teamStats.rarestPull ||
+          probability < getCardOddsProbability(teamStats.rarestPull.card)
+        )
+      ) {
+        teamStats.rarestPull = {
+          card,
+          probability,
+          pulledBy: slackUserId,
+          pulledAt: null
+        };
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) saveStats();
+}
+
+refreshRarestPullsFromInventories();
 
 function getPackCooldown(user) {
   if (!user.lastPack) return 0;
@@ -513,6 +579,28 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
     }
   }
 
+  function getRarityProbability(rarity, minimumRarity = "Common") {
+    const rarityRank = {
+      Common: 0,
+      Rare: 1,
+      Epic: 2,
+      Legendary: 3,
+      Mythical: 4
+    };
+    const eligibleWeights = rarityWeights.filter(
+      item => rarityRank[item.rarity] >= rarityRank[minimumRarity]
+    );
+    const totalWeight = eligibleWeights.reduce(
+      (total, item) => total + item.chance,
+      0
+    );
+    const selectedWeight = eligibleWeights.find(
+      item => item.rarity === rarity
+    )?.chance || 0;
+
+    return selectedWeight / totalWeight;
+  }
+
 
   function getVariant() {
     const roll = Math.random() * 100;
@@ -531,6 +619,18 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
     }
 
     return "Normal";
+  }
+
+  function getVariantProbability(variant) {
+    const multiplier = luckyHour ? 3 : 1;
+    const probabilities = {
+      "🌈 Rainbow": 0.001 * multiplier,
+      "✨ Shiny": 0.009 * multiplier,
+      "🟨 Gold": 0.03 * multiplier,
+      Normal: 1 - 0.04 * multiplier
+    };
+
+    return probabilities[variant] || 0;
   }
 
 
@@ -577,16 +677,24 @@ app.command("/slacktcg-pack", async ({ command, ack, respond, client }) => {
 
   for (let i = 0; i < 5; i++) {
 
-    const rarity = getRandomRarity(godPack ? "Rare" : "Common");
+    const minimumRarity = godPack ? "Rare" : "Common";
+    const rarity = getRandomRarity(minimumRarity);
     const card = godPack
       ? godPackMember
       : memberCards[Math.floor(Math.random() * memberCards.length)];
+    const variant = godPack ? "👑 God" : getVariant();
+    const prismatic = godPack && Math.random() < 0.01;
+    const rarityProbability = getRarityProbability(rarity, minimumRarity);
+    const pullOddsProbability = godPack
+      ? 0.05 * rarityProbability * (prismatic ? 0.01 : 0.99)
+      : 0.95 * rarityProbability * getVariantProbability(variant);
 
     pack.push({
       ...card,
       rarity,
-      variant: godPack ? "👑 God" : getVariant(),
-      prismatic: godPack && Math.random() < 0.01
+      variant,
+      prismatic,
+      pullOddsProbability
     });
   }
 
@@ -610,6 +718,8 @@ ${rarityIcons[card.rarity]} *${card.rarity}*`;
       if (card.prismatic) {
         text += "\n🔮 Finish: *Prismatic*";
       }
+
+      text += `\n🎲 Total odds: *${formatCardOdds(card)}*`;
 
       const cardBlock = {
         type: "section",
@@ -904,6 +1014,7 @@ app.command("/slacktcg-leaderboard", async ({ command, ack, respond }) => {
       `${rarityIcons[card.rarity]} *${card.rarity}*` +
       (card.variant !== "Normal" ? ` · ${card.variant}` : "") +
       (card.prismatic ? " · 🔮 Prismatic" : "") +
+      `\n🎲 Total odds: *${formatCardOdds(card)}*` +
       `\nPulled by <@${rarestPull.pulledBy}>`;
   }
 
