@@ -115,6 +115,21 @@ function formatCardOdds(card) {
   return `${percentageText}% (1 in ${oneInText})`;
 }
 
+function formatCardRarityScore(card) {
+  const probability = getCardOddsProbability(card);
+
+  if (!probability) return "Unknown";
+
+  const memberProbability = 1 / (card.memberPoolSize || 1);
+  const mostCommonCardProbability =
+    memberProbability * 0.95 * 0.6 * 0.96;
+  const score = mostCommonCardProbability / probability;
+
+  return score >= 100
+    ? Math.round(score).toLocaleString("en-US")
+    : score.toFixed(2).replace(/\.?0+$/, "");
+}
+
 function recordPackStats(teamId, slackUserId, pack) {
   stats ||= {};
   stats.teams ||= {};
@@ -557,6 +572,9 @@ Open your daily pack
 
 /slacktcg-inventory [@user]
 View your or another player's five rarest cards
+
+/slacktcg-rarestof @user
+View another player's five rarest cards
 
 /slacktcg-leaderboard
 View the workspace's pack, Mythical, and rarest-pull leaders
@@ -1232,6 +1250,113 @@ Odds: *${formatCardOdds(card)}*`;
           text
         }
       }))
+    ]
+  });
+});
+
+app.command("/slacktcg-rarestof", async ({
+  command,
+  ack,
+  respond,
+  client
+}) => {
+  await ack();
+
+  const targetArg = command.text.trim();
+
+  if (!targetArg) {
+    await respond("❌ Usage: `/slacktcg-rarestof @person`");
+    return;
+  }
+
+  const targetSlackId = await resolveSlackUserId(client, targetArg);
+
+  if (!targetSlackId) {
+    await respond(
+      "❌ I couldn't find that user. Select them from Slack's @mention autocomplete and try again."
+    );
+    return;
+  }
+
+  const cards = users[`${command.team_id}:${targetSlackId}`]?.cards || [];
+
+  if (cards.length === 0) {
+    await respond(`📦 <@${targetSlackId}>'s inventory is empty!`);
+    return;
+  }
+
+  const groupedCards = new Map();
+
+  for (const card of cards) {
+    const key = getCardCollectionKey(card);
+    const existing = groupedCards.get(key);
+
+    if (existing) {
+      existing.count++;
+    } else {
+      groupedCards.set(key, { ...card, count: 1 });
+    }
+  }
+
+  const rarestCards = [...groupedCards.values()]
+    .sort((left, right) => {
+      const oddsDifference =
+        getCardOddsProbability(left) - getCardOddsProbability(right);
+
+      if (oddsDifference !== 0) return oddsDifference;
+      return left.name.localeCompare(right.name);
+    })
+    .slice(0, 5);
+
+  await respond({
+    text: `${targetArg}'s five rarest SlackTCG cards`,
+    blocks: [
+      {
+        type: "header",
+        text: {
+          type: "plain_text",
+          text: "🏆 5 Rarest Cards"
+        }
+      },
+      {
+        type: "context",
+        elements: [{
+          type: "mrkdwn",
+          text: `<@${targetSlackId}>`
+        }]
+      },
+      ...rarestCards.map(card => {
+        let details =
+          `${rarityIcons[card.rarity] || "🃏"} *${card.rarity}* · ` +
+          `Gen ${card.generation || 1} · ` +
+          `Rarity Score: *${formatCardRarityScore(card)}* · ` +
+          `Owned: *${card.count}*`;
+
+        if (card.variant !== "Normal") {
+          details += ` · ${card.variant}`;
+        }
+
+        if (card.prismatic) {
+          details += " · 🔮 Prismatic";
+        }
+
+        return {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `🃏 *${card.name}*\n${details}`
+          },
+          ...(card.imageUrl
+            ? {
+                accessory: {
+                  type: "image",
+                  image_url: card.imageUrl,
+                  alt_text: `${card.name} profile photo`
+                }
+              }
+            : {})
+        };
+      })
     ]
   });
 });
